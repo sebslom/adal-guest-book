@@ -258,8 +258,20 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
 
       {/* Single Minimalist Action Bar */}
       <header className="bg-white border-b border-stone-200 px-3 sm:px-5 py-2 flex items-center justify-between gap-3 z-30 shadow-xs">
-        {/* Left: Core Form Actions (Od nowa formularz, Zapisz na dysku) */}
+        {/* Left: Padlock (with larger spacing) + Core Form Actions */}
         <div className="flex items-center flex-wrap gap-2">
+          {/* KŁÓDKA - po lewej stronie z większym odstępem */}
+          <button
+            type="button"
+            onClick={handleLockClick}
+            className="p-2 text-stone-400 hover:text-stone-600 select-none cursor-default focus:outline-none transition-colors mr-4 sm:mr-6"
+            aria-label={isEng ? 'Lock' : 'Kłódka'}
+            tabIndex={-1}
+            title={isEng ? 'App settings lock' : 'Blokada ustawień'}
+          >
+            <Lock className="w-5 h-5 stroke-[1.8]" />
+          </button>
+
           {/* OD NOWA FORMULARZ */}
           <button
             type="button"
@@ -286,35 +298,10 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                 : (isEng ? 'Save to disk' : 'Zapisz na dysku')}
             </span>
           </button>
+        </div>
 
-          {/* Separator */}
-          <div className="hidden sm:block h-5 w-px bg-stone-200 mx-1" />
-
-          {/* Page Switcher: [<] Strona X na Y [>] */}
-          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage <= 1}
-              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title={isEng ? 'Previous page' : 'Poprzednia strona'}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="px-2.5 py-1 text-xs font-bold text-stone-800 select-none whitespace-nowrap min-w-[95px] text-center">
-              {isEng ? `Page ${currentPage} of ${totalPages}` : `Strona ${currentPage} na ${totalPages}`}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage >= totalPages}
-              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title={isEng ? 'Next page' : 'Następna strona'}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
+        {/* Right: Zoom + Language + Navigation Arrows (po prawej stronie) */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
           {/* Zoom controls */}
           <div className="hidden md:flex items-center bg-stone-100 px-1.5 py-0.5 rounded-xl border border-stone-200 gap-1 text-xs">
             <button
@@ -363,19 +350,31 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
               ENG
             </button>
           </div>
-        </div>
 
-        {/* Right: ONLY the padlock icon (completely inert, silent 5-click trigger) */}
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={handleLockClick}
-            className="p-2 text-stone-400 select-none cursor-default focus:outline-none transition-none"
-            aria-label={isEng ? 'Lock' : 'Kłódka'}
-            tabIndex={-1}
-          >
-            <Lock className="w-5 h-5 stroke-[1.8]" />
-          </button>
+          {/* Page Switcher: [<] Strona X na Y [>] PO PRAWEJ STRONIE */}
+          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              title={isEng ? 'Previous page' : 'Poprzednia strona'}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-2.5 py-1 text-xs font-bold text-stone-800 select-none whitespace-nowrap min-w-[95px] text-center">
+              {isEng ? `Page ${currentPage} of ${totalPages}` : `Strona ${currentPage} na ${totalPages}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              title={isEng ? 'Next page' : 'Następna strona'}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
