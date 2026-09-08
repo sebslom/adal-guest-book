@@ -1,0 +1,6 @@
+{
+  "name": "Tablet PDF Form Studio",
+  "description": "Narzędzie do tworzenia interaktywnych pól na dokumentach PDF (pola tekstowe, kratki zaznaczenia, zdjęcia, podpisy), wygodnego wypełniania na tablecie, zapisu unikalnych plików na dysku oraz wysyłki e-mailem.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
