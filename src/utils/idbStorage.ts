@@ -1,14 +1,17 @@
-import { FormTemplate, SavedSubmission } from '../types';
-import { generateSamplePdfDataUrl } from './pdfHelper';
+import { FormTemplate, SavedSubmission, TemplateHistoryEntry } from '../types';
+import { createAdalGuestBookTemplate, ADAL_TEMPLATE_ID } from './adalTemplate';
 
 const DB_NAME = 'tablet_pdf_studio_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_TEMPLATES = 'templates';
 const STORE_SUBMISSIONS = 'submissions';
 const STORE_SETTINGS = 'settings';
+const STORE_TEMPLATE_HISTORY = 'template_history';
 
 const KEY_CURRENT_TEMPLATE = 'current_template_id';
 const KEY_SESSION_AUTH = 'designer_auth_session';
+const LOCAL_STORAGE_ACTIVE_TEMPLATE = 'adal_active_template_forever_v2';
+const LOCAL_STORAGE_HISTORY_BACKUP = 'adal_template_history_backup_v2';
 
 // The secret password for designer access
 const DESIGNER_PASSWORD_HASH = '123456';
@@ -57,6 +60,9 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
         db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
       }
+      if (!db.objectStoreNames.contains(STORE_TEMPLATE_HISTORY)) {
+        db.createObjectStore(STORE_TEMPLATE_HISTORY, { keyPath: 'id' });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -72,12 +78,16 @@ export async function idbGetTemplates(): Promise<FormTemplate[]> {
       const store = tx.objectStore(STORE_TEMPLATES);
       const req = store.getAll();
       req.onsuccess = () => {
-        const templates = req.result as FormTemplate[];
-        if (templates && templates.length > 0) {
+        const templates = (req.result as FormTemplate[]) || [];
+        if (templates.length > 0) {
+          // Sort by updatedAt descending to give the most recently saved template first
+          templates.sort(
+            (a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+          );
           resolve(templates);
         } else {
-          // Initialize sample template
-          const sample = createDefaultSampleTemplate();
+          // Initialize Adal template
+          const sample = createAdalGuestBookTemplate();
           idbSaveTemplate(sample)
             .then(() => resolve([sample]))
             .catch(() => resolve([sample]));
@@ -92,18 +102,98 @@ export async function idbGetTemplates(): Promise<FormTemplate[]> {
 }
 
 export async function idbSaveTemplate(template: FormTemplate): Promise<void> {
+  // Always update timestamp
+  const updatedTemplate: FormTemplate = {
+    ...template,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Dual persistence: LocalStorage backup
+  try {
+    localStorage.setItem(LOCAL_STORAGE_ACTIVE_TEMPLATE, JSON.stringify(updatedTemplate));
+    localStorage.setItem(KEY_CURRENT_TEMPLATE, updatedTemplate.id);
+  } catch (e) {
+    console.warn('Failed to save to localStorage backup:', e);
+  }
+
   try {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_TEMPLATES, 'readwrite');
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([STORE_TEMPLATES, STORE_SETTINGS], 'readwrite');
       const store = tx.objectStore(STORE_TEMPLATES);
-      const req = store.put(template);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      store.put(updatedTemplate);
+
+      const settingsStore = tx.objectStore(STORE_SETTINGS);
+      settingsStore.put({ key: KEY_CURRENT_TEMPLATE, value: updatedTemplate.id });
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
+
+    // Also auto-save snapshot in template history
+    const historyEntry: TemplateHistoryEntry = {
+      id: 'hist_' + Date.now(),
+      templateId: updatedTemplate.id,
+      templateName: updatedTemplate.name || 'Formularz',
+      fileName: updatedTemplate.fileName || 'formularz.pdf',
+      savedAt: new Date().toISOString(),
+      fieldCount: updatedTemplate.fields?.length || 0,
+      pageCount: updatedTemplate.pageCount || 1,
+      pdfDataUrl: updatedTemplate.pdfDataUrl,
+      fields: JSON.parse(JSON.stringify(updatedTemplate.fields || [])),
+      note: `Wersja z dnia ${new Date().toLocaleDateString('pl-PL')} ${new Date().toLocaleTimeString('pl-PL')}`,
+    };
+    await idbSaveTemplateHistory(historyEntry);
   } catch (err) {
     console.warn('Fallback save template:', err);
-    saveFallbackTemplate(template);
+    saveFallbackTemplate(updatedTemplate);
+  }
+}
+
+// History of template versions
+export async function idbSaveTemplateHistory(entry: TemplateHistoryEntry): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(STORE_TEMPLATE_HISTORY, 'readwrite');
+    const store = tx.objectStore(STORE_TEMPLATE_HISTORY);
+    store.put(entry);
+  } catch (e) {
+    try {
+      const existing = getFallbackHistory();
+      existing.unshift(entry);
+      localStorage.setItem(LOCAL_STORAGE_HISTORY_BACKUP, JSON.stringify(existing.slice(0, 30)));
+    } catch {}
+  }
+}
+
+export async function idbGetTemplateHistory(): Promise<TemplateHistoryEntry[]> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_TEMPLATE_HISTORY, 'readonly');
+      const store = tx.objectStore(STORE_TEMPLATE_HISTORY);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const list = (req.result as TemplateHistoryEntry[]) || [];
+        list.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+        resolve(list);
+      };
+      req.onerror = () => resolve(getFallbackHistory());
+    });
+  } catch {
+    return getFallbackHistory();
+  }
+}
+
+export async function idbDeleteTemplateHistory(id: string): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(STORE_TEMPLATE_HISTORY, 'readwrite');
+    const store = tx.objectStore(STORE_TEMPLATE_HISTORY);
+    store.delete(id);
+  } catch (e) {
+    const existing = getFallbackHistory().filter((h) => h.id !== id);
+    localStorage.setItem(LOCAL_STORAGE_HISTORY_BACKUP, JSON.stringify(existing));
   }
 }
 
@@ -206,20 +296,7 @@ export async function idbDeleteSubmission(id: string): Promise<void> {
 }
 
 export function createDefaultSampleTemplate(): FormTemplate {
-  const { dataUrl, fields } = generateSamplePdfDataUrl();
-  const now = new Date().toISOString();
-  return {
-    id: 'sample_protocol_techniczny',
-    name: 'Protokół Przeglądu / Odbioru Technicznego',
-    description: 'Wzorcowy szablon z polami tekstowymi, kwadracikami, radiami, linkiem i podpisem.',
-    pdfDataUrl: dataUrl,
-    fileName: 'protokol_techniczny_wzor.pdf',
-    pageCount: 1,
-    pageAspectRatios: [1.414],
-    fields: fields,
-    createdAt: now,
-    updatedAt: now,
-  };
+  return createAdalGuestBookTemplate();
 }
 
 // Fallback methods
@@ -250,4 +327,12 @@ function deleteFallbackTemplate(id: string): void {
     const list = getFallbackTemplates().filter((t) => t.id !== id);
     localStorage.setItem('tablet_templates_backup', JSON.stringify(list));
   } catch {}
+}
+
+function getFallbackHistory(): TemplateHistoryEntry[] {
+  try {
+    const raw = localStorage.getItem('adal_template_history_backup_v2');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
 }

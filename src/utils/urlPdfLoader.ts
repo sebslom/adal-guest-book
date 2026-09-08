@@ -30,8 +30,31 @@ export function extractGoogleDriveId(url: string): string | null {
 }
 
 export function buildGoogleDriveDirectUrl(fileId: string): string {
-  // Google Drive export download link
-  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  // Google Drive direct usercontent download link with confirm=t
+  return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0&confirm=t`;
+}
+
+/**
+ * Reads a PDF file directly from local disk / file input
+ */
+export async function readPdfFileFromDisk(file: File): Promise<{ dataUrl: string; fileName: string }> {
+  return new Promise((resolve, reject) => {
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      reject(new Error('Wybrany plik nie jest dokumentem PDF (wymagane rozszerzenie .pdf).'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = reader.result as string;
+      // Quick check if starts with data:application/pdf or data:application/octet-stream
+      resolve({
+        dataUrl: res,
+        fileName: file.name,
+      });
+    };
+    reader.onerror = () => reject(new Error('Błąd podczas wczytywania pliku z dysku.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 export async function fetchPdfFromUrl(inputUrl: string): Promise<{ dataUrl: string; fileName: string }> {
@@ -41,14 +64,18 @@ export async function fetchPdfFromUrl(inputUrl: string): Promise<{ dataUrl: stri
   }
 
   const googleId = extractGoogleDriveId(cleanUrl);
-  let targetUrl = cleanUrl;
   let derivedFileName = 'dokument_google_drive.pdf';
 
+  const targetsToTry: string[] = [];
+
   if (googleId) {
-    targetUrl = buildGoogleDriveDirectUrl(googleId);
     derivedFileName = `dysk_google_${googleId.slice(0, 8)}.pdf`;
+    targetsToTry.push(
+      `https://drive.usercontent.google.com/download?id=${googleId}&export=download&authuser=0&confirm=t`,
+      `https://drive.google.com/uc?export=download&id=${googleId}&confirm=t`,
+      `https://docs.google.com/uc?export=download&id=${googleId}`
+    );
   } else {
-    // Extract filename from URL path if possible
     try {
       const parsed = new URL(cleanUrl);
       const pathSegments = parsed.pathname.split('/');
@@ -61,53 +88,54 @@ export async function fetchPdfFromUrl(inputUrl: string): Promise<{ dataUrl: stri
     } catch {
       derivedFileName = 'dokument_z_linku.pdf';
     }
+    targetsToTry.push(cleanUrl);
   }
 
-  // Fetch strategy with CORS proxy fallbacks to ensure it works anywhere (GitHub Pages, preview, etc.)
-  const candidateUrls: string[] = [
-    targetUrl,
-    // CORS proxy 1
-    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-    // CORS proxy 2
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-  ];
+  // Construct URLs with robust CORS proxies
+  const candidateUrls: string[] = [];
 
-  let lastError: unknown = null;
+  for (const target of targetsToTry) {
+    // 1. Direct fetch (works if already CORS-enabled or same-origin)
+    candidateUrls.push(target);
+    // 2. CodeTabs proxy
+    candidateUrls.push(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
+    // 3. CorsProxy.io
+    candidateUrls.push(`https://corsproxy.io/?url=${encodeURIComponent(target)}`);
+    candidateUrls.push(`https://corsproxy.io/?${encodeURIComponent(target)}`);
+    // 4. AllOrigins proxy
+    candidateUrls.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`);
+  }
+
   let arrayBuffer: ArrayBuffer | null = null;
 
   for (const urlToTry of candidateUrls) {
     try {
       const resp = await fetch(urlToTry);
-      if (!resp.ok) {
-        continue;
-      }
+      if (!resp.ok) continue;
+
       const buffer = await resp.arrayBuffer();
-      // Check if it looks like a PDF (starts with %PDF)
+      if (!buffer || buffer.byteLength < 50) continue;
+
+      // Check strictly if buffer starts with %PDF
       const headerBytes = new Uint8Array(buffer.slice(0, 5));
       const headerStr = String.fromCharCode(...headerBytes);
       if (headerStr.startsWith('%PDF')) {
         arrayBuffer = buffer;
         break;
       }
-      // If it returned HTML instead of PDF (e.g. Google Drive virus scan warning for very large files or login page),
-      // we check if we got binary data
-      if (buffer.byteLength > 1000) {
-        arrayBuffer = buffer;
-        break;
-      }
-    } catch (e) {
-      lastError = e;
+    } catch {
+      // Continue to next candidate
     }
   }
 
   if (!arrayBuffer) {
     if (googleId) {
       throw new Error(
-        'Nie udało się pobrać pliku z Dysku Google. Upewnij się, że plik ma włączone udostępnianie: "Każda osoba mająca link może przeglądać".'
+        'Nie udało się automatycznie pobrać pliku z Google Drive ze względu na zabezpieczenia dostępu. Upewnij się, że plik ma włączone udostępnianie ("Każda osoba mająca link ma dostęp do przeglądania") LUB pobierz plik na dysk i użyj opcji "Wczytaj z dysku".'
       );
     }
     throw new Error(
-      'Nie udało się pobrać pliku PDF z podanego linku. Sprawdź, czy adres jest poprawny i publicznie dostępny.'
+      'Nie udało się pobrać pliku PDF z podanego adresu URL. Sprawdź poprawność linku lub wgraj plik bezpośrednio z dysku komputera.'
     );
   }
 

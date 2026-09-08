@@ -99,6 +99,10 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({ isOpen, onClose, o
                 <span>{error}</span>
               </div>
             )}
+
+            <p className="text-[11px] text-stone-400 mt-1.5">
+              Domyślne hasło administratora: <span className="font-mono font-bold text-stone-600">123456</span>
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">

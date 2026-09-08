@@ -44,18 +44,27 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<FormTemplate | null>(null);
+  const [padlockClicks, setPadlockClicks] = useState(0);
+  const padlockTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  const handleDesignerClick = () => {
-    if (currentMode === 'designer') {
-      onToggleMode('filler');
-      return;
-    }
+  const handlePadlockTripleClick = () => {
+    setPadlockClicks((prev) => {
+      const next = prev + 1;
+      if (padlockTimeoutRef.current) {
+        clearTimeout(padlockTimeoutRef.current);
+      }
 
-    if (isDesignerAuthenticated()) {
-      onToggleMode('designer');
-    } else {
-      setIsPasswordModalOpen(true);
-    }
+      if (next >= 3) {
+        setIsPasswordModalOpen(true);
+        return 0;
+      }
+
+      padlockTimeoutRef.current = setTimeout(() => {
+        setPadlockClicks(0);
+      }, 2500);
+
+      return next;
+    });
   };
 
   const handleLockDesigner = () => {
@@ -218,25 +227,25 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              {/* Single unified button for Designer & Edycja requiring password 123456 */}
+            <div className="flex items-center">
+              {/* Only the padlock in top-right corner - requires 3 clicks to open password modal */}
               <button
                 type="button"
-                onClick={handleDesignerClick}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
-                title="Projektant szablonu i edycja pól (wymaga hasła)"
+                onClick={handlePadlockTripleClick}
+                className="relative p-2 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-xl transition-all active:scale-95"
+                title="Kłódka (kliknij 3 razy, aby przejść do edycji)"
+                aria-label="Kłódka edycji"
               >
-                <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Projektant szablonu i edycja</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsHelpOpen(true)}
-                className="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition-colors"
-                title="Instrukcja obsługi"
-              >
-                <HelpCircle className="w-4 h-4" />
+                <Lock
+                  className={`w-5 h-5 transition-colors ${
+                    padlockClicks > 0 ? 'text-amber-600 scale-105' : 'text-stone-600'
+                  }`}
+                />
+                {padlockClicks > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-xs animate-bounce">
+                    {padlockClicks}
+                  </span>
+                )}
               </button>
             </div>
           )}

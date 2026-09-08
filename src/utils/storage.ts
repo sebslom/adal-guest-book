@@ -1,5 +1,5 @@
 import { FormTemplate, SavedSubmission } from '../types';
-import { generateSamplePdfDataUrl } from './pdfHelper';
+import { createAdalGuestBookTemplate } from './adalTemplate';
 
 const STORAGE_TEMPLATES_KEY = 'tablet_pdf_templates_v1';
 const STORAGE_CURRENT_TEMPLATE_KEY = 'tablet_pdf_current_template_id_v1';
@@ -38,20 +38,7 @@ export function setCurrentTemplateId(id: string): void {
 }
 
 export function createDefaultSampleTemplate(): FormTemplate {
-  const { dataUrl, fields } = generateSamplePdfDataUrl();
-  const now = new Date().toISOString();
-  return {
-    id: 'sample_protocol_techniczny',
-    name: 'Protokół Przeglądu / Odbioru Technicznego',
-    description: 'Gotowy szablon z polami tekstowymi, checklistą, miejscem na zdjęcie i podpisami.',
-    pdfDataUrl: dataUrl,
-    fileName: 'protokol_techniczny_wzor.pdf',
-    pageCount: 1,
-    pageAspectRatios: [1.414], // A4 ratio
-    fields: fields,
-    createdAt: now,
-    updatedAt: now,
-  };
+  return createAdalGuestBookTemplate();
 }
 
 export function getStoredSubmissions(): SavedSubmission[] {

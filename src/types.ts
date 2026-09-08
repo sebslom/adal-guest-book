@@ -58,3 +58,16 @@ export interface SavedSubmission {
   pdfBlobUrl?: string;
   summaryTitle?: string;
 }
+
+export interface TemplateHistoryEntry {
+  id: string;
+  templateId: string;
+  templateName: string;
+  fileName: string;
+  savedAt: string;
+  fieldCount: number;
+  pageCount: number;
+  pdfDataUrl?: string;
+  fields: FormField[];
+  note?: string;
+}

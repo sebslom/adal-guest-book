@@ -7,6 +7,8 @@ import {
   Calendar,
   Trash2,
   Copy,
+  ClipboardPaste,
+  Check,
   Sliders,
   ChevronLeft,
   ChevronRight,
@@ -18,9 +20,17 @@ import {
   HelpCircle,
   Radio,
   Link as LinkIcon,
+  Save,
+  HardDrive,
+  History,
+  Upload,
 } from 'lucide-react';
 import { FormField, FormTemplate, FieldType } from '../types';
-import { RenderedPage } from '../utils/pdfHelper';
+import { RenderedPage, renderPdfPages } from '../utils/pdfHelper';
+import { readPdfFileFromDisk } from '../utils/urlPdfLoader';
+import { AdalFormBackground } from './AdalFormBackground';
+import { GooglePdfLoadModal } from './GooglePdfLoadModal';
+import { HistoryModal } from './HistoryModal';
 
 interface TemplateDesignerProps {
   template: FormTemplate;
@@ -36,6 +46,50 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
   onSwitchToFiller,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [localPages, setLocalPages] = useState<RenderedPage[]>(renderedPages);
+  const [isGoogleLoadOpen, setIsGoogleLoadOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const diskPdfInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setLocalPages(renderedPages);
+  }, [renderedPages]);
+
+  const handleDirectDiskUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      showNotification('Wczytywanie i przetwarzanie pliku PDF z dysku...');
+      const { dataUrl, fileName } = await readPdfFileFromDisk(file);
+      const pages = await renderPdfPages(dataUrl, 1400);
+
+      if (pages.length === 0) {
+        alert('Wybrany plik PDF jest pusty.');
+        return;
+      }
+
+      setLocalPages(pages);
+      const updated: FormTemplate = {
+        ...template,
+        fileName,
+        pdfDataUrl: dataUrl,
+        pageCount: pages.length,
+        pageAspectRatios: pages.map((p) => p.aspectRatio),
+        updatedAt: new Date().toISOString(),
+      };
+      onUpdateTemplate(updated);
+      showNotification(
+        `Wczytano plik "${fileName}" (${pages.length} str.). Kliknij "Zapisz formularz", aby zapisać na stałe.`
+      );
+    } catch (err: unknown) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Błąd podczas wczytywania pliku z dysku.');
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<FieldType | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -48,31 +102,113 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
     w: 0,
     h: 0,
   });
+  const [clipboardField, setClipboardField] = useState<FormField | null>(null);
+  const [designerNotification, setDesignerNotification] = useState<string | null>(null);
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const currentPageData = renderedPages.find((p) => p.pageNumber === currentPage) || renderedPages[0];
+  const currentPageData = localPages.find((p) => p.pageNumber === currentPage) || localPages[0];
   const pageFields = template.fields.filter((f) => f.page === currentPage);
   const selectedField = template.fields.find((f) => f.id === selectedFieldId);
 
-  // Keyboard navigation & delete
+  const showNotification = useCallback((message: string) => {
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current);
+    }
+    setDesignerNotification(message);
+    notificationTimeoutRef.current = setTimeout(() => {
+      setDesignerNotification(null);
+    }, 2400);
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    if (!selectedField) return;
+    setClipboardField({ ...selectedField });
+    showNotification(`Skopiowano okienko "${selectedField.label}" (Ctrl+C)`);
+  }, [selectedField, showNotification]);
+
+  const handlePaste = useCallback(() => {
+    if (!clipboardField) return;
+
+    // Place on current page and offset slightly
+    let newX = clipboardField.x + 2.5;
+    let newY = clipboardField.y + 2.5;
+
+    if (newX + clipboardField.width > 99) {
+      newX = Math.max(1, 99 - clipboardField.width);
+    }
+    if (newY + clipboardField.height > 99) {
+      newY = Math.max(1, 99 - clipboardField.height);
+    }
+
+    const newField: FormField = {
+      ...clipboardField,
+      id: `field_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      page: currentPage,
+      x: Number(newX.toFixed(2)),
+      y: Number(newY.toFixed(2)),
+      label: clipboardField.label.includes('(kopia)')
+        ? clipboardField.label
+        : `${clipboardField.label} (kopia)`,
+    };
+
+    const updated = {
+      ...template,
+      fields: [...template.fields, newField],
+      updatedAt: new Date().toISOString(),
+    };
+
+    onUpdateTemplate(updated);
+    setSelectedFieldId(newField.id);
+    setClipboardField(newField);
+    showNotification(`Wklejono okienko "${newField.label}" (Ctrl+V)`);
+  }, [clipboardField, currentPage, template, onUpdateTemplate, showNotification]);
+
+  // Keyboard navigation, delete, and Ctrl+C / Ctrl+V
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFieldId) {
-        // Only if not focused in an input
-        const target = e.target as HTMLElement;
-        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
-          handleDeleteField(selectedFieldId);
-        }
-      }
+      const target = e.target as HTMLElement | null;
+      const isInput =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
       if (e.key === 'Escape') {
         setActiveTool(null);
         setSelectedFieldId(null);
+        return;
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFieldId && !isInput) {
+        e.preventDefault();
+        handleDeleteField(selectedFieldId);
+        return;
+      }
+
+      // Ctrl+C or Cmd+C (Copy)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        if (!isInput && selectedField) {
+          e.preventDefault();
+          handleCopy();
+          return;
+        }
+      }
+
+      // Ctrl+V or Cmd+V (Paste)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        if (!isInput && clipboardField) {
+          e.preventDefault();
+          handlePaste();
+          return;
+        }
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFieldId]);
+  }, [selectedFieldId, selectedField, clipboardField, handleCopy, handlePaste]);
 
   const handleAddField = (type: FieldType, clickXPercent: number, clickYPercent: number) => {
     let width = 25;
@@ -396,21 +532,38 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-stone-200">
                 <span className="text-xs font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-amber-600" /> Właściwości pola
+                  <Sliders className="w-3.5 h-3.5 text-amber-600" /> Właściwości okna
                 </span>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => handleDuplicateField(selectedField)}
-                    title="Duplikuj pole"
-                    className="p-1.5 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition-colors"
+                    onClick={handleCopy}
+                    title="Kopiuj okienko (Ctrl+C)"
+                    className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
                   <button
                     type="button"
+                    onClick={handlePaste}
+                    disabled={!clipboardField}
+                    title={clipboardField ? `Wklej: ${clipboardField.label} (Ctrl+V)` : 'Wklej okienko (Ctrl+V)'}
+                    className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors disabled:opacity-30"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateField(selectedField)}
+                    title="Zduplikuj pole"
+                    className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5 opacity-60" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleDeleteField(selectedField.id)}
-                    title="Usuń pole"
+                    title="Usuń pole (Delete)"
                     className="p-1.5 text-stone-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -478,35 +631,200 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
                 </div>
               )}
 
-              {/* Geometry coordinates */}
-              <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-2 text-xs">
-                <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-                  Położenie i rozmiar (% strony)
+              {/* Ręczne wpisywanie wymiarów i położenia okna */}
+              <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3 text-xs shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1">
+                    <Maximize2 className="w-3.5 h-3.5 text-amber-700" /> Rozmiar okna (wpisz ręcznie)
+                  </span>
+                  <span className="text-[10px] text-stone-500 font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">
+                    % strony
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-stone-500">Szerokość: {selectedField.width}%</label>
-                    <input
-                      type="range"
-                      min="2"
-                      max="95"
-                      step="0.5"
-                      value={selectedField.width}
-                      onChange={(e) => updateSelectedFieldProps({ width: parseFloat(e.target.value) })}
-                      className="w-full accent-amber-600"
-                    />
+
+                {/* Szerokość (W) */}
+                <div className="space-y-1 bg-white p-2.5 rounded-lg border border-stone-200">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-stone-700">
+                      Szerokość (W):
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        step="0.1"
+                        value={selectedField.width}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val)) {
+                            const clamped = Math.max(1, Math.min(100 - selectedField.x, Number(val.toFixed(2))));
+                            updateSelectedFieldProps({ width: clamped });
+                          }
+                        }}
+                        className="w-20 px-2 py-1 text-xs text-right font-mono font-bold text-stone-900 bg-stone-50 border border-stone-300 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                      <span className="text-stone-500 font-medium text-xs">%</span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[11px] text-stone-500">Wysokość: {selectedField.height}%</label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="60"
-                      step="0.5"
-                      value={selectedField.height}
-                      onChange={(e) => updateSelectedFieldProps({ height: parseFloat(e.target.value) })}
-                      className="w-full accent-amber-600"
-                    />
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    step="0.5"
+                    value={selectedField.width}
+                    onChange={(e) => updateSelectedFieldProps({ width: parseFloat(e.target.value) })}
+                    className="w-full accent-amber-600 cursor-pointer"
+                  />
+                </div>
+
+                {/* Wysokość (H) */}
+                <div className="space-y-1 bg-white p-2.5 rounded-lg border border-stone-200">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-stone-700">
+                      Wysokość (H):
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0.5"
+                        max="100"
+                        step="0.1"
+                        value={selectedField.height}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val)) {
+                            const clamped = Math.max(0.5, Math.min(100 - selectedField.y, Number(val.toFixed(2))));
+                            updateSelectedFieldProps({ height: clamped });
+                          }
+                        }}
+                        className="w-20 px-2 py-1 text-xs text-right font-mono font-bold text-stone-900 bg-stone-50 border border-stone-300 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                      <span className="text-stone-500 font-medium text-xs">%</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="60"
+                    step="0.5"
+                    value={selectedField.height}
+                    onChange={(e) => updateSelectedFieldProps({ height: parseFloat(e.target.value) })}
+                    className="w-full accent-amber-600 cursor-pointer"
+                  />
+                </div>
+
+                {/* Położenie okna X i Y */}
+                <div className="bg-white p-2.5 rounded-lg border border-stone-200 space-y-1.5">
+                  <div className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                    Położenie okna (X / Y)
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-stone-600 mb-0.5 block">X (od lewej):</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="99"
+                          step="0.1"
+                          value={selectedField.x}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                              const clamped = Math.max(0, Math.min(100 - selectedField.width, Number(val.toFixed(2))));
+                              updateSelectedFieldProps({ x: clamped });
+                            }
+                          }}
+                          className="w-full px-2 py-1 text-xs text-right font-mono font-semibold bg-stone-50 border border-stone-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <span className="text-stone-400 text-[10px]">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-600 mb-0.5 block">Y (od góry):</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="99"
+                          step="0.1"
+                          value={selectedField.y}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                              const clamped = Math.max(0, Math.min(100 - selectedField.height, Number(val.toFixed(2))));
+                              updateSelectedFieldProps({ y: clamped });
+                            }
+                          }}
+                          className="w-full px-2 py-1 text-xs text-right font-mono font-semibold bg-stone-50 border border-stone-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <span className="text-stone-400 text-[10px]">%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Szybkie przyciski korekty rozmiaru */}
+                <div className="pt-0.5">
+                  <div className="text-[10px] text-stone-500 mb-1 font-medium">
+                    Korekta rozmiaru krok po kroku:
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelectedFieldProps({
+                          width: Math.max(1, Number((selectedField.width - 1).toFixed(2))),
+                        })
+                      }
+                      className="px-1 py-1 text-[10px] font-mono font-semibold bg-white hover:bg-stone-100 border border-stone-200 rounded text-stone-700 text-center"
+                      title="Zmniejsz szerokość o 1%"
+                    >
+                      W -1%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelectedFieldProps({
+                          width: Math.min(
+                            100 - selectedField.x,
+                            Number((selectedField.width + 1).toFixed(2))
+                          ),
+                        })
+                      }
+                      className="px-1 py-1 text-[10px] font-mono font-semibold bg-white hover:bg-stone-100 border border-stone-200 rounded text-stone-700 text-center"
+                      title="Zwiększ szerokość o 1%"
+                    >
+                      W +1%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelectedFieldProps({
+                          height: Math.max(0.5, Number((selectedField.height - 0.5).toFixed(2))),
+                        })
+                      }
+                      className="px-1 py-1 text-[10px] font-mono font-semibold bg-white hover:bg-stone-100 border border-stone-200 rounded text-stone-700 text-center"
+                      title="Zmniejsz wysokość o 0.5%"
+                    >
+                      H -0.5%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSelectedFieldProps({
+                          height: Math.min(
+                            100 - selectedField.y,
+                            Number((selectedField.height + 0.5).toFixed(2))
+                          ),
+                        })
+                      }
+                      className="px-1 py-1 text-[10px] font-mono font-semibold bg-white hover:bg-stone-100 border border-stone-200 rounded text-stone-700 text-center"
+                      title="Zwiększ wysokość o 0.5%"
+                    >
+                      H +0.5%
+                    </button>
                   </div>
                 </div>
               </div>
@@ -517,7 +835,7 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
                 className="w-full py-2 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Usuń to pole
+                Usuń to pole (Delete)
               </button>
             </div>
           ) : (
@@ -532,11 +850,15 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
         <div className="p-4 bg-stone-50 border-t border-stone-200">
           <button
             type="button"
-            onClick={onSwitchToFiller}
-            className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-colors"
+            onClick={() => {
+              onUpdateTemplate(template);
+              showNotification('Formularz został pomyślnie zapisany!');
+              setTimeout(() => onSwitchToFiller(), 300);
+            }}
+            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
           >
-            <FileCheck className="w-4 h-4" />
-            Przejdź do trybu tabletu (Wypełnianie)
+            <Save className="w-4 h-4" />
+            <span>Zapisz formularz i wyjdź</span>
           </button>
         </div>
       </div>
@@ -579,6 +901,45 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
             </span>
           </div>
 
+          {/* Copy and Paste controls (Ctrl+C / Ctrl+V) */}
+          <div className="flex items-center gap-1.5 bg-stone-50 p-1 rounded-xl border border-stone-200">
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!selectedField}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 disabled:opacity-40 transition-colors shadow-2xs"
+              title={
+                selectedField
+                  ? `Kopiuj "${selectedField.label}" (Ctrl+C)`
+                  : 'Zaznacz okienko, aby skopiować (Ctrl+C)'
+              }
+            >
+              <Copy className="w-3.5 h-3.5 text-amber-600" />
+              <span>Kopiuj</span>
+              <kbd className="text-[9px] bg-stone-100 text-stone-500 px-1 py-0.5 rounded font-mono border border-stone-200">
+                Ctrl+C
+              </kbd>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePaste}
+              disabled={!clipboardField}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 disabled:opacity-40 transition-colors shadow-2xs"
+              title={
+                clipboardField
+                  ? `Wklej: ${clipboardField.label} (Ctrl+V)`
+                  : 'Wklej okienko (Ctrl+V) - najpierw skopiuj (Ctrl+C)'
+              }
+            >
+              <ClipboardPaste className="w-3.5 h-3.5 text-amber-600" />
+              <span>Wklej</span>
+              <kbd className="text-[9px] bg-stone-100 text-stone-500 px-1 py-0.5 rounded font-mono border border-stone-200">
+                Ctrl+V
+              </kbd>
+            </button>
+          </div>
+
           {/* Zoom controls */}
           <div className="flex items-center gap-2">
             <button
@@ -606,6 +967,63 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
             >
               100%
             </button>
+
+            {/* Hidden file input for direct disk PDF upload */}
+            <input
+              ref={diskPdfInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={handleDirectDiskUpload}
+              className="hidden"
+            />
+
+            {/* Wczytaj z dysku */}
+            <button
+              type="button"
+              onClick={() => diskPdfInputRef.current?.click()}
+              className="ml-2 px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 border border-stone-300 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Wczytaj podkład formularza bezpośrednio z pliku PDF na Twoim komputerze"
+            >
+              <Upload className="w-3.5 h-3.5 text-stone-600" />
+              <span>Wczytaj z dysku</span>
+            </button>
+
+            {/* Wczytaj z linku Google */}
+            <button
+              type="button"
+              onClick={() => setIsGoogleLoadOpen(true)}
+              className="ml-1 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Wczytaj podkład formularza PDF z linku Google Drive lub bezpośredniego adresu URL"
+            >
+              <LinkIcon className="w-3.5 h-3.5" />
+              <span>Wczytaj z Google</span>
+            </button>
+
+            {/* Historia */}
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen(true)}
+              className="ml-1 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-200 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Zobacz historię wersji formularza oraz wpisy gości"
+            >
+              <History className="w-3.5 h-3.5 text-amber-700" />
+              <span>Historia</span>
+            </button>
+
+            {/* Zapisz formularz button in top bar */}
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateTemplate(template);
+                showNotification('Formularz został pomyślnie i trwale zapisany!');
+                setTimeout(() => onSwitchToFiller(), 350);
+              }}
+              className="ml-2 px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Zastosuj i zapisz formularz na stałe do strony głównej"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Zapisz formularz</span>
+            </button>
           </div>
         </div>
 
@@ -616,24 +1034,29 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
             className="transition-all duration-75 relative bg-white shadow-xl rounded-sm border border-stone-300"
           >
             {/* Page background image / canvas */}
-            {currentPageData ? (
-              <div
-                ref={pageContainerRef}
-                onClick={handlePageClick}
-                className={`relative w-full select-none ${
-                  activeTool ? 'cursor-crosshair ring-2 ring-amber-400' : 'cursor-default'
-                }`}
-                style={{
-                  paddingTop: `${(currentPageData.aspectRatio || 1.414) * 100}%`,
-                }}
-              >
-                {/* Background image */}
+            <div
+              ref={pageContainerRef}
+              onClick={handlePageClick}
+              className={`relative w-full select-none ${
+                activeTool ? 'cursor-crosshair ring-2 ring-amber-400' : 'cursor-default'
+              }`}
+              style={{
+                paddingTop: `${(currentPageData?.aspectRatio || 1.414) * 100}%`,
+              }}
+            >
+              {/* Background vector or real PDF image 1:1 */}
+              {currentPageData?.dataUrl ? (
                 <img
                   src={currentPageData.dataUrl}
                   alt={`Strona ${currentPage}`}
                   className="absolute inset-0 w-full h-full object-contain pointer-events-none"
                   referrerPolicy="no-referrer"
                 />
+              ) : (
+                <div className="absolute inset-0 w-full h-full pointer-events-none select-none">
+                  <AdalFormBackground page={currentPage} />
+                </div>
+              )}
 
                 {/* Overlaid Interactive Fields */}
                 {pageFields.map((field) => {
@@ -697,23 +1120,66 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
                         )}
                       </div>
 
-                      {/* Resize handle on bottom right */}
+                      {/* Resize handle & live dimensions on bottom of selected field */}
                       {isSelected && (
-                        <div
-                          onMouseDown={(e) => handleResizeMouseDown(e, field)}
-                          className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-amber-600 rounded-full cursor-se-resize border-2 border-white shadow-xs z-40 hover:scale-125 transition-transform"
-                        />
+                        <>
+                          <div className="absolute -bottom-5 left-0 bg-stone-900/90 text-amber-300 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs whitespace-nowrap pointer-events-none z-40 border border-stone-700">
+                            W: {field.width}% × H: {field.height}%
+                          </div>
+                          <div
+                            onMouseDown={(e) => handleResizeMouseDown(e, field)}
+                            className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-amber-600 rounded-full cursor-se-resize border-2 border-white shadow-xs z-40 hover:scale-125 transition-transform"
+                            title="Przeciągnij, aby zmienić rozmiar okna"
+                          />
+                        </>
                       )}
                     </div>
                   );
                 })}
-              </div>
-            ) : (
-              <div className="p-12 text-center text-stone-400">Ładowanie strony PDF...</div>
-            )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Floating notification toast for Copy / Paste actions */}
+      {designerNotification && (
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-4 py-2.5 rounded-xl shadow-xl border border-stone-700 text-xs font-semibold flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
+          <span>{designerNotification}</span>
+        </div>
+      )}
+
+      {/* Google Drive PDF Load Modal */}
+      <GooglePdfLoadModal
+        isOpen={isGoogleLoadOpen}
+        onClose={() => setIsGoogleLoadOpen(false)}
+        onPdfLoaded={(dataUrl, fileName, pages) => {
+          setLocalPages(pages);
+          const updated: FormTemplate = {
+            ...template,
+            fileName,
+            pdfDataUrl: dataUrl,
+            pageCount: pages.length,
+            pageAspectRatios: pages.map((p) => p.aspectRatio),
+            updatedAt: new Date().toISOString(),
+          };
+          onUpdateTemplate(updated);
+          showNotification(
+            `Wczytano plik PDF (${pages.length} str.). Kliknij "Zapisz formularz", aby zapisać na stałe.`
+          );
+        }}
+      />
+
+      {/* History Modal */}
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        currentTemplate={template}
+        onRestoreTemplate={(restored) => {
+          onUpdateTemplate(restored);
+          showNotification('Przywrócono wersję formularza z historii!');
+        }}
+      />
     </div>
   );
 };

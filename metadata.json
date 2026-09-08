@@ -1,6 +1,6 @@
 {
-  "name": "Tablet PDF Form Studio",
-  "description": "Narzędzie do tworzenia interaktywnych pól na dokumentach PDF (pola tekstowe, kratki zaznaczenia, zdjęcia, podpisy), wygodnego wypełniania na tablecie, zapisu unikalnych plików na dysku oraz wysyłki e-mailem.",
+  "name": "formularz pdf adal",
+  "description": "Formularz PDF Adal Guest Book 2026 - szybkie wypełnianie na tablecie, zapis na dysku oraz wysyłka e-mailem.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
