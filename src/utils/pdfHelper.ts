@@ -411,7 +411,7 @@ export async function generateFilledPdf(
       const fieldHeight = (field.height / 100) * page.height;
 
       if (field.type === 'checkbox') {
-        const isChecked = Boolean(val ?? field.defaultValue);
+        const isChecked = Boolean(val);
         if (isChecked) {
           // Draw a clean checkmark or square indicator
           ctx.save();
@@ -483,7 +483,7 @@ export async function generateFilledPdf(
         });
       } else if (field.type === 'radio') {
         // Radio button: draw circular indicator if selected
-        const isSelected = Boolean(val ?? field.defaultValue);
+        const isSelected = Boolean(val);
         ctx.save();
         const centerX = fieldLeft + fieldWidth / 2;
         const centerY = fieldTop + fieldHeight / 2;
@@ -554,27 +554,58 @@ export async function generateFilledPdf(
         ctx.fillStyle = '#0f172a';
         ctx.textBaseline = 'top';
 
-        const lineHeight = baseFontSize * 1.35;
+        const multiplier = field.lineHeight && field.lineHeight > 0 ? field.lineHeight : 1.35;
+        const lineHeight = baseFontSize * multiplier;
         const maxWidth = fieldWidth - 10;
-        const words = textStr.split(' ');
-        let line = '';
+
+        let startX = fieldLeft + 5;
+        if (field.align === 'center') {
+          ctx.textAlign = 'center';
+          startX = fieldLeft + fieldWidth / 2;
+        } else if (field.align === 'right') {
+          ctx.textAlign = 'right';
+          startX = fieldLeft + fieldWidth - 5;
+        } else {
+          ctx.textAlign = 'left';
+        }
+
+        const paragraphs = textStr.split('\n');
         let lineY = fieldTop + 6;
 
-        for (let n = 0; n < words.length; n++) {
-          const testLine = line + words[n] + ' ';
-          const metrics = ctx.measureText(testLine);
-          if (metrics.width > maxWidth && n > 0) {
-            ctx.fillText(line, fieldLeft + 5, lineY, maxWidth);
-            line = words[n] + ' ';
+        outer: for (const para of paragraphs) {
+          if (para.trim() === '') {
+            lineY += lineHeight * 0.8;
+            if (lineY + lineHeight > fieldTop + fieldHeight) break outer;
+            continue;
+          }
+
+          const words = para.split(' ');
+          let currentLine = '';
+
+          for (let n = 0; n < words.length; n++) {
+            const testLine = currentLine ? currentLine + ' ' + words[n] : words[n];
+            const metrics = ctx.measureText(testLine);
+
+            if (metrics.width > maxWidth && currentLine) {
+              ctx.fillText(currentLine, startX, lineY, maxWidth);
+              currentLine = words[n];
+              lineY += lineHeight;
+              if (lineY + lineHeight > fieldTop + fieldHeight) {
+                currentLine = '';
+                break outer;
+              }
+            } else {
+              currentLine = testLine;
+            }
+          }
+
+          if (currentLine && lineY + lineHeight <= fieldTop + fieldHeight + 5) {
+            ctx.fillText(currentLine, startX, lineY, maxWidth);
             lineY += lineHeight;
-            if (lineY + lineHeight > fieldTop + fieldHeight) break;
-          } else {
-            line = testLine;
+            if (lineY + lineHeight > fieldTop + fieldHeight) break outer;
           }
         }
-        if (line && lineY + lineHeight <= fieldTop + fieldHeight + 5) {
-          ctx.fillText(line, fieldLeft + 5, lineY, maxWidth);
-        }
+
         ctx.restore();
       }
     }

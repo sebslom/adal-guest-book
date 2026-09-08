@@ -4,6 +4,7 @@ import {
   idbGetTemplates,
   idbSaveTemplate,
   createDefaultSampleTemplate,
+  idbPruneTemplateHistoryKeepOnlyCurrent,
 } from './utils/idbStorage';
 import { TemplateDesigner } from './components/TemplateDesigner';
 import { TabletFiller } from './components/TabletFiller';
@@ -73,6 +74,8 @@ export default function App() {
             setTemplate(initial);
           }
           setIsStorageLoaded(true);
+          // Automatically prune past edit history versions, keeping only the current active one
+          idbPruneTemplateHistoryKeepOnlyCurrent().catch(() => {});
         }
       } catch (err) {
         console.error('Error loading template from storage:', err);

@@ -631,6 +631,142 @@ export const TemplateDesigner: React.FC<TemplateDesignerProps> = ({
                 </div>
               )}
 
+              {/* Formatowanie tekstu i odstępy między wierszami */}
+              {(selectedField.type === 'text' || selectedField.type === 'textarea') && (
+                <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-3 text-xs">
+                  <div className="text-[11px] font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Type className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Format tekstu i odstępy (interlinia)</span>
+                  </div>
+
+                  {/* Odstęp między wierszami (Line Height) */}
+                  <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-stone-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-stone-700">
+                        Odstęp między wierszami:
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0.8"
+                          max="3.5"
+                          step="0.05"
+                          value={selectedField.lineHeight || 1.35}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                              updateSelectedFieldProps({ lineHeight: Math.max(0.8, Math.min(4.0, Number(val.toFixed(2)))) });
+                            }
+                          }}
+                          className="w-16 px-2 py-0.5 text-xs text-right font-mono font-bold text-stone-900 bg-stone-50 border border-stone-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <span className="text-stone-400 text-[10px]">x</span>
+                      </div>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0.9"
+                      max="2.5"
+                      step="0.05"
+                      value={selectedField.lineHeight || 1.35}
+                      onChange={(e) => updateSelectedFieldProps({ lineHeight: parseFloat(e.target.value) })}
+                      className="w-full accent-amber-600 cursor-pointer"
+                    />
+
+                    {/* Presety interlinii */}
+                    <div className="grid grid-cols-4 gap-1 pt-1">
+                      {[
+                        { label: '1.15 Ciasne', val: 1.15 },
+                        { label: '1.35 Norm', val: 1.35 },
+                        { label: '1.6 Luźne', val: 1.6 },
+                        { label: '2.0 Podwójne', val: 2.0 },
+                      ].map((preset) => {
+                        const isCurrent = Math.abs((selectedField.lineHeight || 1.35) - preset.val) < 0.05;
+                        return (
+                          <button
+                            key={preset.val}
+                            type="button"
+                            onClick={() => updateSelectedFieldProps({ lineHeight: preset.val })}
+                            className={`py-1 px-0.5 text-[9px] font-medium rounded border text-center transition-colors cursor-pointer ${
+                              isCurrent
+                                ? 'bg-amber-600 text-white border-amber-600 font-bold shadow-2xs'
+                                : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Rozmiar czcionki */}
+                  <div className="space-y-1.5 bg-white p-2.5 rounded-lg border border-stone-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-stone-700">
+                        Rozmiar czcionki:
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="8"
+                          max="48"
+                          step="1"
+                          value={selectedField.fontSize || 12}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              updateSelectedFieldProps({ fontSize: Math.max(8, Math.min(60, val)) });
+                            }
+                          }}
+                          className="w-16 px-2 py-0.5 text-xs text-right font-mono font-bold text-stone-900 bg-stone-50 border border-stone-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <span className="text-stone-400 text-[10px]">px</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 pt-0.5">
+                      {[10, 11, 12, 14, 16, 18].map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => updateSelectedFieldProps({ fontSize: size })}
+                          className={`flex-1 py-1 text-[10px] font-mono rounded border transition-colors cursor-pointer ${
+                            (selectedField.fontSize || 12) === size
+                              ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                              : 'bg-stone-50 hover:bg-stone-100 text-stone-600 border-stone-200'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Wyrównanie tekstu */}
+                  <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-stone-200">
+                    <span className="text-[11px] font-semibold text-stone-700">Wyrównanie:</span>
+                    <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-md border border-stone-200">
+                      {(['left', 'center', 'right'] as const).map((aln) => (
+                        <button
+                          key={aln}
+                          type="button"
+                          onClick={() => updateSelectedFieldProps({ align: aln })}
+                          className={`px-2.5 py-0.5 text-[10px] font-semibold rounded capitalize cursor-pointer transition-colors ${
+                            (selectedField.align || 'left') === aln
+                              ? 'bg-white text-stone-900 shadow-2xs'
+                              : 'text-stone-500 hover:text-stone-800'
+                          }`}
+                        >
+                          {aln === 'left' ? 'Lewo' : aln === 'center' ? 'Środek' : 'Prawo'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Ręczne wpisywanie wymiarów i położenia okna */}
               <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3 text-xs shadow-2xs">
                 <div className="flex items-center justify-between">

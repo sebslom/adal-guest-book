@@ -292,6 +292,8 @@ export function getAdalDefaultFields(): FormField[] {
       width: 79.5,
       height: 25.5,
       placeholder: 'Wpisz notatki i pomysły projektowe klienta...',
+      fontSize: 12,
+      lineHeight: 1.35,
     },
 
     // -------------------------------------------------------------
@@ -308,6 +310,8 @@ export function getAdalDefaultFields(): FormField[] {
       width: 79.5,
       height: 36.5,
       placeholder: 'Dodatkowe szczegółowe notatki, ustalenia techniczne, szkice...',
+      fontSize: 12,
+      lineHeight: 1.35,
     },
     // Project Budget
     {

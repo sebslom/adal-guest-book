@@ -22,6 +22,7 @@ export interface FormField {
   required?: boolean;
   defaultValue?: string | boolean;
   fontSize?: number; // in px at standard 1000px width reference
+  lineHeight?: number; // line spacing multiplier (e.g. 1.2, 1.35, 1.6, 2.0)
   align?: 'left' | 'center' | 'right';
   helpText?: string;
   // Radio button options (e.g. ['Tak', 'Nie'] or ['Zgodny', 'Niezgodny'])

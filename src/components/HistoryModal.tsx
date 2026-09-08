@@ -4,23 +4,23 @@ import {
   X,
   RotateCcw,
   Trash2,
-  Download,
   Calendar,
   Layers,
   FileText,
   User,
   CheckCircle2,
   Clock,
-  ChevronRight,
-  Sparkles,
 } from 'lucide-react';
 import { FormTemplate, SavedSubmission, TemplateHistoryEntry } from '../types';
 import {
   idbGetTemplateHistory,
   idbDeleteTemplateHistory,
+  idbClearAllTemplateHistory,
   idbGetSubmissions,
   idbDeleteSubmission,
+  idbClearAllSubmissions,
   idbSaveTemplate,
+  idbPruneTemplateHistoryKeepOnlyCurrent,
 } from '../utils/idbStorage';
 
 interface HistoryModalProps {
@@ -66,17 +66,40 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleRestore = async (entry: TemplateHistoryEntry) => {
-    if (
-      !window.confirm(
-        `Czy na pewno chcesz przywrócić wersję formularza z ${new Date(
-          entry.savedAt
-        ).toLocaleString('pl-PL')}?`
-      )
-    ) {
-      return;
+  const handlePruneHistory = async () => {
+    try {
+      const remaining = await idbPruneTemplateHistoryKeepOnlyCurrent();
+      setTemplateHistory(remaining);
+      setSuccessMessage('Usunięto wcześniejsze wersje. Pozostawiono tylko aktualną wersję!');
+      setTimeout(() => setSuccessMessage(null), 2500);
+    } catch (e) {
+      console.error('Failed to prune history:', e);
     }
+  };
 
+  const handleClearAllTemplates = async () => {
+    try {
+      await idbClearAllTemplateHistory();
+      setTemplateHistory([]);
+      setSuccessMessage('Historia wersji formularza została całkowicie wyczyszczona!');
+      setTimeout(() => setSuccessMessage(null), 2500);
+    } catch (e) {
+      console.error('Failed to clear template history:', e);
+    }
+  };
+
+  const handleClearAllSubmissions = async () => {
+    try {
+      await idbClearAllSubmissions();
+      setSubmissions([]);
+      setSuccessMessage('Wszystkie zapisane wpisy gości zostały usunięte!');
+      setTimeout(() => setSuccessMessage(null), 2500);
+    } catch (e) {
+      console.error('Failed to clear submissions:', e);
+    }
+  };
+
+  const handleRestore = async (entry: TemplateHistoryEntry) => {
     const restored: FormTemplate = {
       id: entry.templateId || currentTemplate.id,
       name: entry.templateName || currentTemplate.name,
@@ -100,16 +123,26 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
   const handleDeleteHistoryEntry = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm('Usunąć ten wpis z historii wersji?')) return;
-    await idbDeleteTemplateHistory(id);
-    setTemplateHistory((prev) => prev.filter((h) => h.id !== id));
+    try {
+      await idbDeleteTemplateHistory(id);
+      setTemplateHistory((prev) => prev.filter((h) => h.id !== id));
+      setSuccessMessage('Wpis został usunięty z historii');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err) {
+      console.error('Failed to delete history entry:', err);
+    }
   };
 
   const handleDeleteSubmission = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm('Usunąć tę wypełnioną kartę gościa?')) return;
-    await idbDeleteSubmission(id);
-    setSubmissions((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await idbDeleteSubmission(id);
+      setSubmissions((prev) => prev.filter((s) => s.id !== id));
+      setSuccessMessage('Wpis gościa został usunięty');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err) {
+      console.error('Failed to delete submission:', err);
+    }
   };
 
   return (
@@ -145,33 +178,73 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
           </div>
         )}
 
-        {/* Tab selector */}
-        <div className="flex border-b border-stone-200 px-6 pt-2 bg-white gap-6 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('templates')}
-            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === 'templates'
-                ? 'border-amber-600 text-amber-800'
-                : 'border-transparent text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>Wersje formularza ({templateHistory.length})</span>
-          </button>
+        {/* Tab selector and Actions */}
+        <div className="flex items-center justify-between border-b border-stone-200 px-6 pt-2 bg-white">
+          <div className="flex gap-6 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setActiveTab('templates')}
+              className={`pb-3 border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+                activeTab === 'templates'
+                  ? 'border-amber-600 text-amber-800'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              <span>Wersje formularza ({templateHistory.length})</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('submissions')}
-            className={`pb-3 border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === 'submissions'
-                ? 'border-amber-600 text-amber-800'
-                : 'border-transparent text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Wpisy gości ({submissions.length})</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('submissions')}
+              className={`pb-3 border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+                activeTab === 'submissions'
+                  ? 'border-amber-600 text-amber-800'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Wpisy gości ({submissions.length})</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 mb-2">
+            {activeTab === 'templates' && templateHistory.length > 1 && (
+              <button
+                type="button"
+                onClick={handlePruneHistory}
+                className="px-2.5 py-1 text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Usuń wcześniejsze wersje i pozostaw wyłącznie aktualną"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+                <span>Zostaw tylko aktualną</span>
+              </button>
+            )}
+
+            {activeTab === 'templates' && templateHistory.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllTemplates}
+                className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Usuń całą historię wersji"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Wyczyść całą historię</span>
+              </button>
+            )}
+
+            {activeTab === 'submissions' && submissions.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllSubmissions}
+                className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Wyczyść wszystkie zapisane wpisy gości"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Usuń wszystkie wpisy</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content list */}
@@ -184,9 +257,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             templateHistory.length === 0 ? (
               <div className="text-center py-12 text-stone-400 space-y-2">
                 <Clock className="w-8 h-8 mx-auto stroke-1 text-stone-300" />
-                <p className="text-sm font-semibold text-stone-600">Brak zapisanych wcześniejszych wersji</p>
+                <p className="text-sm font-semibold text-stone-600">Brak zapisanych wersji</p>
                 <p className="text-xs text-stone-400">
-                  Każde kliknięcie "Zapisz formularz" automatycznie utworzy kopię zapasową w tym miejscu.
+                  Historia wersji jest pusta. Kliknięcie "Zapisz formularz" w projektancie utworzy aktualną wersję.
                 </p>
               </div>
             ) : (
@@ -244,16 +317,14 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                         <RotateCcw className="w-3.5 h-3.5" />
                         <span>Przywróć</span>
                       </button>
-                      {!isCurrent && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteHistoryEntry(entry.id, e)}
-                          className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Usuń wpis z historii"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteHistoryEntry(entry.id, e)}
+                        className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Usuń wpis z historii"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 );

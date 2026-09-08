@@ -38,7 +38,7 @@ export const EmailModal: React.FC<EmailModalProps> = ({
   fields.forEach((field) => {
     const val = values[field.id];
     if (field.type === 'checkbox') {
-      const isChecked = Boolean(val ?? field.defaultValue);
+      const isChecked = Boolean(val);
       summaryLines.push(`• [${isChecked ? 'TAK' : 'NIE'}] ${field.label}`);
     } else if (field.type === 'image') {
       summaryLines.push(`• ${field.label}: ${val ? '[Dołączono zdjęcie]' : '[Brak zdjęcia]'}`);

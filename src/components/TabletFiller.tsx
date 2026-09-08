@@ -40,14 +40,14 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
   const [values, setValues] = useState<FilledValues>(() => {
     const initial: FilledValues = {};
     template.fields.forEach((f) => {
-      if (f.defaultValue !== undefined) {
-        initial[f.id] = f.defaultValue;
+      if (f.type === 'checkbox' || f.type === 'radio') {
+        initial[f.id] = false;
+      } else if (f.type === 'image' || f.type === 'signature') {
+        initial[f.id] = undefined;
+      } else {
+        initial[f.id] = '';
       }
     });
-    // Set default date if not set
-    if (!initial['p1_date']) {
-      initial['p1_date'] = new Date().toISOString().slice(0, 10);
-    }
     return initial;
   });
 
@@ -171,11 +171,11 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
     const blank: FilledValues = {};
     template.fields.forEach((f) => {
       if (f.type === 'checkbox' || f.type === 'radio') blank[f.id] = false;
+      else if (f.type === 'image' || f.type === 'signature') blank[f.id] = undefined;
       else blank[f.id] = '';
     });
-    blank['p1_date'] = new Date().toISOString().slice(0, 10);
     setValues(blank);
-    setSaveSuccessMessage('Formularz został wyczyszczony. Możesz wprowadzać dane nowego gościa.');
+    setSaveSuccessMessage('Formularz został wyczyszczony. Karta gościa jest całkowicie pusta.');
     setTimeout(() => setSaveSuccessMessage(null), 3500);
   };
 
@@ -441,13 +441,13 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       type="button"
                       onClick={() => handleCheckboxToggle(field.id)}
                       className={`w-full h-full flex items-center justify-center rounded-xs transition-all focus:outline-none cursor-pointer ${
-                        Boolean(val ?? field.defaultValue)
+                        Boolean(val)
                           ? 'bg-amber-600/15 border-2 border-amber-600 text-stone-900 font-black'
                           : 'bg-white/70 border border-stone-400 hover:border-amber-500 hover:bg-amber-50/50'
                       }`}
                       title={field.label}
                     >
-                      {Boolean(val ?? field.defaultValue) ? (
+                      {Boolean(val) ? (
                         <Check className="w-[85%] h-[85%] stroke-[3.5] text-stone-900" />
                       ) : null}
                     </button>
@@ -459,13 +459,13 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       type="button"
                       onClick={() => handleRadioSelect(field)}
                       className={`w-full h-full flex items-center justify-center rounded-full transition-all focus:outline-none cursor-pointer ${
-                        Boolean(val ?? field.defaultValue)
+                        Boolean(val)
                           ? 'bg-amber-600/20 border-2 border-amber-600 text-stone-900'
                           : 'bg-white/70 border border-stone-400 hover:border-amber-500 hover:bg-amber-50/50'
                       }`}
                       title={field.label}
                     >
-                      {Boolean(val ?? field.defaultValue) ? (
+                      {Boolean(val) ? (
                         <div className="w-2.5 h-2.5 bg-amber-600 rounded-full" />
                       ) : null}
                     </button>
@@ -478,6 +478,10 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       value={typeof val === 'string' ? val : ''}
                       onChange={(e) => handleTextChange(field.id, e.target.value)}
                       placeholder={field.placeholder || ''}
+                      style={{
+                        fontSize: field.fontSize ? `${field.fontSize}px` : undefined,
+                        textAlign: field.align || 'left',
+                      }}
                       className="w-full h-full px-1 py-0.5 text-xs sm:text-sm font-medium text-stone-900 bg-transparent hover:bg-amber-50/30 focus:bg-white focus:outline-none border-b border-transparent focus:border-amber-500 transition-colors"
                     />
                   )}
@@ -489,6 +493,10 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       value={typeof val === 'string' ? val : ''}
                       onChange={(e) => handleTextChange(field.id, e.target.value)}
                       placeholder="DD.MM.YYYY"
+                      style={{
+                        fontSize: field.fontSize ? `${field.fontSize}px` : undefined,
+                        textAlign: field.align || 'center',
+                      }}
                       className="w-full h-full px-1 py-0.5 text-xs sm:text-sm font-medium text-stone-900 bg-transparent hover:bg-amber-50/30 focus:bg-white focus:outline-none border-b border-transparent focus:border-amber-500 transition-colors"
                     />
                   )}
@@ -500,7 +508,12 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       onChange={(e) => handleTextChange(field.id, e.target.value)}
                       placeholder={field.placeholder || (isEng ? 'Enter notes or client requirements...' : 'Wpisz notatki lub ustalenia z klientem...')}
                       rows={6}
-                      className="w-full h-full p-1.5 text-xs sm:text-sm leading-[22px] font-medium text-stone-900 bg-transparent hover:bg-amber-50/20 focus:bg-white/90 focus:outline-none rounded border border-transparent focus:border-amber-400 resize-none transition-all"
+                      style={{
+                        fontSize: field.fontSize ? `${field.fontSize}px` : undefined,
+                        lineHeight: field.lineHeight ? `${field.lineHeight}` : '1.35',
+                        textAlign: field.align || 'left',
+                      }}
+                      className="w-full h-full p-1.5 text-xs sm:text-sm font-medium text-stone-900 bg-transparent hover:bg-amber-50/20 focus:bg-white/90 focus:outline-none rounded border border-transparent focus:border-amber-400 resize-none transition-all"
                     />
                   )}
 
