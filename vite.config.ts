@@ -11,7 +11,25 @@ export default defineConfig(() => {
       react(),
       tailwindcss(),
       {
-        name: 'github-pages-helper',
+        name: 'pdf-and-main-handler',
+        buildStart() {
+          try {
+            const rootFiles = fs.readdirSync(__dirname);
+            const publicDir = path.resolve(__dirname, 'public');
+            const publicMainDir = path.resolve(__dirname, 'public', 'main');
+            if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+            if (!fs.existsSync(publicMainDir)) fs.mkdirSync(publicMainDir, { recursive: true });
+
+            for (const file of rootFiles) {
+              if (file.endsWith('.pdf')) {
+                fs.copyFileSync(path.resolve(__dirname, file), path.resolve(publicDir, file));
+                fs.copyFileSync(path.resolve(__dirname, file), path.resolve(publicMainDir, file));
+              }
+            }
+          } catch (e) {
+            console.error('buildStart copy pdf error:', e);
+          }
+        },
         closeBundle() {
           try {
             const distPath = path.resolve(__dirname, 'dist');
@@ -22,11 +40,20 @@ export default defineConfig(() => {
                 fs.copyFileSync(indexPath, path.join(distPath, '404.html'));
               }
             }
-            // Copy main/ folder into dist/main/ if exists
-            const mainDir = path.resolve(__dirname, 'main');
+            // Copy main/ folder and any root PDF into dist/ and dist/main/
             const distMain = path.resolve(__dirname, 'dist', 'main');
+            if (!fs.existsSync(distMain)) fs.mkdirSync(distMain, { recursive: true });
+
+            const rootFiles = fs.readdirSync(__dirname);
+            for (const file of rootFiles) {
+              if (file.endsWith('.pdf')) {
+                fs.copyFileSync(path.resolve(__dirname, file), path.resolve(distPath, file));
+                fs.copyFileSync(path.resolve(__dirname, file), path.resolve(distMain, file));
+              }
+            }
+
+            const mainDir = path.resolve(__dirname, 'main');
             if (fs.existsSync(mainDir)) {
-              if (!fs.existsSync(distMain)) fs.mkdirSync(distMain, { recursive: true });
               const files = fs.readdirSync(mainDir);
               for (const f of files) {
                 const srcPath = path.join(mainDir, f);
@@ -36,21 +63,29 @@ export default defineConfig(() => {
               }
             }
           } catch (e) {
-            console.error('Failed to copy 404 or create .nojekyll or copy main folder:', e);
+            console.error('Failed to copy 404 or PDF to dist:', e);
           }
         },
-      },
-      {
-        name: 'serve-main-folder',
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             if (req.url) {
               const urlClean = req.url.split('?')[0];
+              // Check if requesting main/ or a root PDF file directly
+              const candidates: string[] = [];
               if (urlClean.startsWith('/main/') || urlClean.startsWith('./main/')) {
                 const subPath = decodeURIComponent(urlClean.replace(/^\.?\/main\//, ''));
-                const filePath = path.resolve(__dirname, 'main', subPath);
+                candidates.push(path.resolve(__dirname, 'main', subPath));
+                candidates.push(path.resolve(__dirname, subPath));
+              } else if (urlClean.endsWith('.pdf')) {
+                const subPath = decodeURIComponent(urlClean.replace(/^\.?\//, ''));
+                candidates.push(path.resolve(__dirname, subPath));
+                candidates.push(path.resolve(__dirname, 'main', subPath));
+                candidates.push(path.resolve(__dirname, 'public', subPath));
+              }
+
+              for (const filePath of candidates) {
                 if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-                  res.setHeader('Content-Type', filePath.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+                  res.setHeader('Content-Type', 'application/pdf');
                   fs.createReadStream(filePath).pipe(res);
                   return;
                 }
