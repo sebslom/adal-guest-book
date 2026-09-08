@@ -439,6 +439,12 @@ export async function generateFilledPdf(
           ctx.restore();
         }
       } else if (field.type === 'image' && typeof val === 'string' && val.startsWith('data:image')) {
+        // Draw white background behind image/graphic to cover background layer
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(fieldLeft, fieldTop, fieldWidth, fieldHeight);
+        ctx.restore();
+
         // Draw user uploaded image inside the box preserving aspect ratio or fitting neatly
         await new Promise<void>((resolve) => {
           const img = new Image();
@@ -472,6 +478,12 @@ export async function generateFilledPdf(
           img.src = val;
         });
       } else if (field.type === 'signature' && typeof val === 'string' && val.startsWith('data:image')) {
+        // Draw white background behind sketch/drawing to cover background layer
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(fieldLeft, fieldTop, fieldWidth, fieldHeight);
+        ctx.restore();
+
         // Draw handwritten signature
         await new Promise<void>((resolve) => {
           const img = new Image();
@@ -528,6 +540,10 @@ export async function generateFilledPdf(
       } else if ((field.type === 'text' || field.type === 'date') && val) {
         const textStr = String(val);
         ctx.save();
+        // White background behind text to cover underlying printed lines/labels
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(fieldLeft, fieldTop, fieldWidth, fieldHeight);
+
         const baseFontSize = (field.fontSize || 13) * (page.width / 800);
         ctx.font = `600 ${baseFontSize}px 'Plus Jakarta Sans', sans-serif, Arial`;
         ctx.fillStyle = '#0f172a';
@@ -550,6 +566,10 @@ export async function generateFilledPdf(
       } else if (field.type === 'textarea' && val) {
         const textStr = String(val);
         ctx.save();
+        // White background behind textarea to cover underlying ruled lines
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(fieldLeft, fieldTop, fieldWidth, fieldHeight);
+
         const baseFontSize = (field.fontSize || 12) * (page.width / 800);
         ctx.font = `500 ${baseFontSize}px 'Plus Jakarta Sans', sans-serif, Arial`;
         ctx.fillStyle = '#0f172a';

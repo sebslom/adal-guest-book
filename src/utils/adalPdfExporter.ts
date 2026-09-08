@@ -78,6 +78,8 @@ export async function generateAdalGuestBookPdf(
   const projectBoxVal = values['p1_project_box'];
   if (typeof projectBoxVal === 'string' && projectBoxVal.startsWith('data:image')) {
     try {
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(98.2, 12.2, 91.6, 53.6, 2.5, 2.5, 'F');
       doc.addImage(projectBoxVal, 'PNG', 99, 13, 90, 46);
     } catch {
       // ignore
@@ -267,6 +269,9 @@ export async function generateAdalGuestBookPdf(
   if (p1Notes) {
     const lines = doc.splitTextToSize(p1Notes, 168);
     lines.slice(0, 14).forEach((line: string, idx: number) => {
+      const textW = doc.getTextWidth(line);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(20.5, p1LineStarts[idx] - 3.8, Math.min(168, textW + 2), 4.2, 'F');
       doc.text(line, 21, p1LineStarts[idx] - 1.2);
     });
   }
@@ -445,6 +450,9 @@ export async function generateAdalGuestBookPdf(
   if (p2Notes) {
     const lines = doc.splitTextToSize(p2Notes, 168);
     lines.slice(0, 19).forEach((line: string, idx: number) => {
+      const textW = doc.getTextWidth(line);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(20.5, p2LineStarts[idx] - 3.8, Math.min(168, textW + 2), 4.2, 'F');
       doc.text(line, 21, p2LineStarts[idx] - 1.2);
     });
   }

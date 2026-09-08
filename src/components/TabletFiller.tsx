@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Download,
-  Mail,
   RotateCcw,
   Check,
   ZoomIn,
@@ -92,6 +91,12 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
 
   const currentPageData = renderedPages.find((p) => p.pageNumber === currentPage) || renderedPages[0];
   const pageFields = template.fields.filter((f) => f.page === currentPage);
+  const totalPages = Math.max(
+    template.pageCount || 1,
+    renderedPages.length || 1,
+    ...template.fields.map((f) => f.page || 1),
+    2
+  );
 
   // Handle 5 clicks on the lock in the top right corner - resets after 5 clicks and after timeout
   const handleLockClick = () => {
@@ -179,7 +184,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
     setTimeout(() => setSaveSuccessMessage(null), 3500);
   };
 
-  // Save to Disk as 2-page PDF (1:1 identical to original)
+  // Save to Disk as 2-page PDF (1:1 identical to original - quick download)
   const handleSaveToDisk = async () => {
     setIsGeneratingPdf(true);
     try {
@@ -253,7 +258,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
 
       {/* Single Minimalist Action Bar */}
       <header className="bg-white border-b border-stone-200 px-3 sm:px-5 py-2 flex items-center justify-between gap-3 z-30 shadow-xs">
-        {/* Left: Core Form Actions (Od nowa formularz, Zapisz na dysku, Wyślij email) */}
+        {/* Left: Core Form Actions (Od nowa formularz, Zapisz na dysku) */}
         <div className="flex items-center flex-wrap gap-2">
           {/* OD NOWA FORMULARZ */}
           <button
@@ -266,59 +271,47 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
             <span>{isEng ? 'Reset form' : 'Od nowa formularz'}</span>
           </button>
 
-          {/* ZAPISANIE NA DYSKU */}
+          {/* ZAPISZ NA DYSKU */}
           <button
             type="button"
             onClick={handleSaveToDisk}
             disabled={isGeneratingPdf}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-            title={isEng ? 'Save completed PDF document to device storage' : 'Zapisz gotowy dokument PDF na dysku urządzenia'}
+            title={isEng ? 'Save filled form to disk as PDF' : 'Zapisz wypełniony formularz na dysku jako plik PDF'}
           >
             <Download className="w-4 h-4 shrink-0" />
             <span>
               {isGeneratingPdf
                 ? (isEng ? 'Saving...' : 'Zapisywanie...')
-                : (isEng ? 'Save to disk' : 'Zapisanie na dysku')}
+                : (isEng ? 'Save to disk' : 'Zapisz na dysku')}
             </span>
-          </button>
-
-          {/* WYŚLIJ EMAIL */}
-          <button
-            type="button"
-            onClick={() => setIsEmailModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-stone-800 bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-300 rounded-xl transition-all shadow-2xs cursor-pointer"
-            title={isEng ? 'Send form to recipient from email list' : 'Wyślij formularz do odbiorcy z listy e-mail'}
-          >
-            <Mail className="w-4 h-4 text-amber-700 shrink-0" />
-            <span>{isEng ? 'Send email' : 'Wyślij e-mail'}</span>
           </button>
 
           {/* Separator */}
           <div className="hidden sm:block h-5 w-px bg-stone-200 mx-1" />
 
-          {/* Page Switcher */}
-          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200">
+          {/* Page Switcher: [<] Strona X na Y [>] */}
+          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200 shadow-2xs">
             <button
               type="button"
-              onClick={() => setCurrentPage(1)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                currentPage === 1
-                  ? 'bg-white text-stone-900 shadow-2xs'
-                  : 'text-stone-500 hover:text-stone-800'
-              }`}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              title={isEng ? 'Previous page' : 'Poprzednia strona'}
             >
-              {isEng ? 'Page 1' : 'Strona 1'}
+              <ChevronLeft className="w-4 h-4" />
             </button>
+            <span className="px-2.5 py-1 text-xs font-bold text-stone-800 select-none whitespace-nowrap min-w-[95px] text-center">
+              {isEng ? `Page ${currentPage} of ${totalPages}` : `Strona ${currentPage} na ${totalPages}`}
+            </span>
             <button
               type="button"
-              onClick={() => setCurrentPage(2)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                currentPage === 2
-                  ? 'bg-white text-stone-900 shadow-2xs'
-                  : 'text-stone-500 hover:text-stone-800'
-              }`}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1.5 text-stone-600 hover:text-stone-900 hover:bg-stone-200/80 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              title={isEng ? 'Next page' : 'Następna strona'}
             >
-              {isEng ? 'Page 2' : 'Strona 2'}
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
@@ -443,7 +436,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       className={`w-full h-full flex items-center justify-center rounded-xs transition-all focus:outline-none cursor-pointer ${
                         Boolean(val)
                           ? 'bg-amber-600/15 border-2 border-amber-600 text-stone-900 font-black'
-                          : 'bg-white/70 border border-stone-400 hover:border-amber-500 hover:bg-amber-50/50'
+                          : 'border border-stone-400/50 hover:border-amber-500 hover:bg-amber-50/40'
                       }`}
                       title={field.label}
                     >
@@ -461,7 +454,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                       className={`w-full h-full flex items-center justify-center rounded-full transition-all focus:outline-none cursor-pointer ${
                         Boolean(val)
                           ? 'bg-amber-600/20 border-2 border-amber-600 text-stone-900'
-                          : 'bg-white/70 border border-stone-400 hover:border-amber-500 hover:bg-amber-50/50'
+                          : 'border border-stone-400/50 hover:border-amber-500 hover:bg-amber-50/40'
                       }`}
                       title={field.label}
                     >
@@ -482,7 +475,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                         fontSize: field.fontSize ? `${field.fontSize}px` : undefined,
                         textAlign: field.align || 'left',
                       }}
-                      className="w-full h-full px-1 py-0.5 text-xs sm:text-sm font-medium text-stone-900 bg-transparent hover:bg-amber-50/30 focus:bg-white focus:outline-none border-b border-transparent focus:border-amber-500 transition-colors"
+                      className="w-full h-full px-1.5 py-0.5 text-xs sm:text-sm font-medium text-stone-900 bg-white hover:bg-white focus:bg-white focus:outline-none border border-stone-300/80 focus:border-amber-500 rounded-xs transition-colors shadow-2xs"
                     />
                   )}
 
@@ -497,7 +490,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                         fontSize: field.fontSize ? `${field.fontSize}px` : undefined,
                         textAlign: field.align || 'center',
                       }}
-                      className="w-full h-full px-1 py-0.5 text-xs sm:text-sm font-medium text-stone-900 bg-transparent hover:bg-amber-50/30 focus:bg-white focus:outline-none border-b border-transparent focus:border-amber-500 transition-colors"
+                      className="w-full h-full px-1.5 py-0.5 text-xs sm:text-sm font-medium text-stone-900 bg-white hover:bg-white focus:bg-white focus:outline-none border border-stone-300/80 focus:border-amber-500 rounded-xs transition-colors shadow-2xs"
                     />
                   )}
 
@@ -513,19 +506,19 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                         lineHeight: field.lineHeight ? `${field.lineHeight}` : '1.35',
                         textAlign: field.align || 'left',
                       }}
-                      className="w-full h-full p-1.5 text-xs sm:text-sm font-medium text-stone-900 bg-transparent hover:bg-amber-50/20 focus:bg-white/90 focus:outline-none rounded border border-transparent focus:border-amber-400 resize-none transition-all"
+                      className="w-full h-full p-2 text-xs sm:text-sm font-medium text-stone-900 bg-white hover:bg-white focus:bg-white focus:outline-none rounded-xs border border-stone-300/80 focus:border-amber-500 resize-none transition-all shadow-2xs"
                     />
                   )}
 
                   {/* 6. SKETCH / IMAGE / PROJECT BOX FIELD */}
                   {(field.type === 'image' || field.type === 'signature') && (
-                    <div className="w-full h-full relative rounded border border-dashed border-stone-400/80 hover:border-amber-500 bg-stone-50/40 hover:bg-amber-50/30 transition-all flex flex-col items-center justify-center p-1">
+                    <div className="w-full h-full relative rounded-xs border border-stone-300 hover:border-amber-500 bg-white transition-all flex flex-col items-center justify-center p-1 shadow-2xs">
                       {val && typeof val === 'string' && val.startsWith('data:image') ? (
-                        <div className="relative w-full h-full flex items-center justify-center">
+                        <div className="relative w-full h-full flex items-center justify-center bg-white">
                           <img
                             src={val}
                             alt={field.label}
-                            className="max-w-full max-h-full object-contain pointer-events-none"
+                            className="max-w-full max-h-full object-contain pointer-events-none bg-white"
                           />
                           <button
                             type="button"
