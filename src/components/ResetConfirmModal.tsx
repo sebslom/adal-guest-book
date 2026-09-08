@@ -5,10 +5,18 @@ interface ResetConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  lang?: 'PL' | 'ENG';
 }
 
-export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({ isOpen, onClose, onConfirm }) => {
+export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  lang = 'PL',
+}) => {
   if (!isOpen) return null;
+
+  const isEng = lang === 'ENG';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fadeIn">
@@ -20,8 +28,12 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({ isOpen, on
               <RotateCcw className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-stone-900">Nowy formularz / Czysty arkusz</h2>
-              <p className="text-[11px] text-stone-500">Przygotowanie arkusza na kolejne dane</p>
+              <h2 className="text-sm font-bold text-stone-900">
+                {isEng ? 'New Form / Clear Sheet' : 'Nowy formularz / Czysty arkusz'}
+              </h2>
+              <p className="text-[11px] text-stone-500">
+                {isEng ? 'Prepare sheet for next guest entry' : 'Przygotowanie arkusza na kolejne dane'}
+              </p>
             </div>
           </div>
           <button
@@ -38,12 +50,18 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({ isOpen, on
           <div className="flex items-start gap-3 p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700 leading-relaxed">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-stone-900 mb-1">Czy chcesz wyczyścić wszystkie wprowadzone dane?</p>
+              <p className="font-semibold text-stone-900 mb-1">
+                {isEng ? 'Do you want to clear all entered data?' : 'Czy chcesz wyczyścić wszystkie wprowadzone dane?'}
+              </p>
               <p className="text-stone-600">
-                Wszystkie wpisane teksty, zaznaczenia w kwadracikach, dodane zdjęcia z aparatu oraz podpisy zostaną usunięte, aby można było wypełnić arkusz dla kolejnej osoby.
+                {isEng
+                  ? 'All entered texts, checked boxes, photos, and signatures will be cleared to prepare the form for the next visitor.'
+                  : 'Wszystkie wpisane teksty, zaznaczenia w kwadracikach, dodane zdjęcia z aparatu oraz podpisy zostaną usunięte, aby można było wypełnić arkusz dla kolejnej osoby.'}
               </p>
               <p className="text-[11px] text-emerald-700 font-medium mt-1.5">
-                ✓ Szablon PDF oraz rozmieszczenie pól pozostaną nienaruszone.
+                {isEng
+                  ? '✓ PDF template and field positions will remain intact.'
+                  : '✓ Szablon PDF oraz rozmieszczenie pól pozostaną nienaruszone.'}
               </p>
             </div>
           </div>
@@ -54,7 +72,7 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({ isOpen, on
               onClick={onClose}
               className="px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100 rounded-xl transition-colors"
             >
-              Anuluj
+              {isEng ? 'Cancel' : 'Anuluj'}
             </button>
             <button
               type="button"
@@ -62,10 +80,10 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({ isOpen, on
                 onConfirm();
                 onClose();
               }}
-              className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Wyczyść i zacznij od nowa</span>
+              <span>{isEng ? 'Clear and start fresh' : 'Wyczyść i zacznij od nowa'}</span>
             </button>
           </div>
         </div>

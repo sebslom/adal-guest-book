@@ -10,6 +10,7 @@ interface EmailSenderModalProps {
   values: FilledValues;
   fields: FormField[];
   renderedPages?: RenderedPage[];
+  lang?: 'PL' | 'ENG';
 }
 
 const STORAGE_EMAIL_RECIPIENTS_KEY = 'adal_email_recipients_list_v1';
@@ -25,7 +26,9 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
   values,
   fields,
   renderedPages,
+  lang = 'PL',
 }) => {
+  const isEng = lang === 'ENG';
   const [recipients, setRecipients] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_EMAIL_RECIPIENTS_KEY);
@@ -199,16 +202,20 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
               <Mail className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-stone-900">Wyślij formularz e-mailem</h3>
+              <h3 className="text-base font-bold text-stone-900">
+                {isEng ? 'Send Form via Email' : 'Wyślij formularz e-mailem'}
+              </h3>
               <p className="text-xs text-stone-500">
-                Wybierz odbiorcę z listy lub dodaj nowy adres e-mail
+                {isEng
+                  ? 'Select recipient from the list or add a new email address'
+                  : 'Wybierz odbiorcę z listy lub dodaj nowy adres e-mail'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200 rounded-lg transition-colors"
+            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -219,7 +226,7 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
           {/* Recipient list */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
-              Wybierz odbiorcę z listy:
+              {isEng ? 'Select recipient from list:' : 'Wybierz odbiorcę z listy:'}
             </label>
             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
               {recipients.map((email) => {
@@ -250,8 +257,8 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleDeleteEmail(email, e)}
-                      title="Usuń adres z listy"
-                      className="text-stone-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-md transition-colors"
+                      title={isEng ? 'Remove email from list' : 'Usuń adres z listy'}
+                      className="text-stone-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -264,22 +271,22 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
           {/* Add new email input */}
           <form onSubmit={handleAddEmail} className="pt-1">
             <label className="text-xs font-semibold text-stone-600 mb-1 block">
-              + Dodaj nowy adres e-mail do listy:
+              {isEng ? '+ Add new email address to list:' : '+ Dodaj nowy adres e-mail do listy:'}
             </label>
             <div className="flex gap-2">
               <input
                 type="email"
-                placeholder="np. klient@firma.pl lub manager@adal.pl"
+                placeholder={isEng ? 'e.g. client@company.com or manager@adal.pl' : 'np. klient@firma.pl lub manager@adal.pl'}
                 value={newEmailInput}
                 onChange={(e) => setNewEmailInput(e.target.value)}
                 className="flex-1 px-3 py-2 text-xs border border-stone-300 rounded-xl bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
               />
               <button
                 type="submit"
-                className="px-3 py-2 text-xs font-semibold bg-stone-800 hover:bg-stone-900 text-white rounded-xl flex items-center gap-1.5 transition-colors shadow-2xs"
+                className="px-3 py-2 text-xs font-semibold bg-stone-800 hover:bg-stone-900 text-white rounded-xl flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Dodaj</span>
+                <span>{isEng ? 'Add' : 'Dodaj'}</span>
               </button>
             </div>
           </form>
@@ -287,21 +294,22 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
           {/* Summary preview */}
           <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-1.5">
             <div className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-              Podsumowanie wysyłki:
+              {isEng ? 'Dispatch summary:' : 'Podsumowanie wysyłki:'}
             </div>
             <div className="grid grid-cols-2 gap-2 text-stone-700">
               <div>
-                <span className="text-stone-400">Do:</span>{' '}
-                <strong className="font-mono text-stone-900">{selectedEmail || 'Brak wyboru'}</strong>
+                <span className="text-stone-400">{isEng ? 'To:' : 'Do:'}</span>{' '}
+                <strong className="font-mono text-stone-900">{selectedEmail || (isEng ? 'None selected' : 'Brak wyboru')}</strong>
               </div>
               <div>
-                <span className="text-stone-400">Klient:</span>{' '}
-                <strong>{company || contact || 'Brak danych'}</strong>
+                <span className="text-stone-400">{isEng ? 'Client:' : 'Klient:'}</span>{' '}
+                <strong>{company || contact || (isEng ? 'No data' : 'Brak danych')}</strong>
               </div>
             </div>
             <div className="text-[11px] text-stone-500 pt-1">
-              Kliknięcie przycisku poniżej zapisze plik PDF na dysku urządzenia oraz uruchomi
-              aplikację pocztową z przygotowanym tematem i treścią wiadomości.
+              {isEng
+                ? 'Clicking the button below saves the PDF to device storage and opens your email application with a pre-configured subject and body.'
+                : 'Kliknięcie przycisku poniżej zapisze plik PDF na dysku urządzenia oraz uruchomi aplikację pocztową z przygotowanym tematem i treścią wiadomości.'}
             </div>
           </div>
 
@@ -318,9 +326,9 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-200 rounded-xl transition-colors"
+            className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
           >
-            Anuluj
+            {isEng ? 'Cancel' : 'Anuluj'}
           </button>
           <button
             type="button"
@@ -329,7 +337,11 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
             className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
           >
             <Send className="w-4 h-4" />
-            <span>{isGenerating ? 'Przygotowywanie...' : 'Wyślij e-mail i zapisz PDF'}</span>
+            <span>
+              {isGenerating
+                ? (isEng ? 'Preparing...' : 'Przygotowywanie...')
+                : (isEng ? 'Send email & save PDF' : 'Wyślij e-mail i zapisz PDF')}
+            </span>
           </button>
         </div>
       </div>

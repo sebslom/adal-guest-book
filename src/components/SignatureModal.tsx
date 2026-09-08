@@ -7,15 +7,20 @@ interface SignatureModalProps {
   onSave: (dataUrl: string) => void;
   title?: string;
   initialValue?: string;
+  lang?: 'PL' | 'ENG';
 }
 
 export const SignatureModal: React.FC<SignatureModalProps> = ({
   isOpen,
   onClose,
   onSave,
-  title = 'Podpis odręczny na tablecie',
+  title,
   initialValue,
+  lang = 'PL',
 }) => {
+  const isEng = lang === 'ENG';
+  const defaultTitle = isEng ? 'Tablet Signature / Sketch' : 'Podpis odręczny na tablecie';
+  const displayTitle = title || defaultTitle;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasContent, setHasContent] = useState(false);
@@ -126,7 +131,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
           <div className="flex items-center gap-2">
             <PenTool className="w-5 h-5 text-amber-600" />
-            <h3 className="font-semibold text-stone-900">{title}</h3>
+            <h3 className="font-semibold text-stone-900">{displayTitle}</h3>
           </div>
           <button
             onClick={onClose}
@@ -152,7 +157,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
             />
             {!hasContent && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-stone-400 text-sm">
-                Podpisz się palcem lub rysikiem tutaj
+                {isEng ? 'Sign or sketch here with stylus or finger' : 'Podpisz się palcem lub rysikiem tutaj'}
               </div>
             )}
             <div className="absolute bottom-6 left-6 right-6 border-b border-stone-200 pointer-events-none" />
@@ -160,37 +165,37 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
 
           <div className="flex items-center justify-between text-xs text-stone-500">
             <div className="flex items-center gap-2">
-              <span>Grubość pióra:</span>
+              <span>{isEng ? 'Pen width:' : 'Grubość pióra:'}</span>
               <button
                 type="button"
                 onClick={() => setStrokeWidth(1.8)}
                 className={`px-2 py-1 rounded ${strokeWidth === 1.8 ? 'bg-amber-100 text-amber-800 font-semibold' : 'bg-stone-100'}`}
               >
-                Cienka
+                {isEng ? 'Thin' : 'Cienka'}
               </button>
               <button
                 type="button"
                 onClick={() => setStrokeWidth(2.8)}
                 className={`px-2 py-1 rounded ${strokeWidth === 2.8 ? 'bg-amber-100 text-amber-800 font-semibold' : 'bg-stone-100'}`}
               >
-                Średnia
+                {isEng ? 'Medium' : 'Średnia'}
               </button>
               <button
                 type="button"
                 onClick={() => setStrokeWidth(4.2)}
                 className={`px-2 py-1 rounded ${strokeWidth === 4.2 ? 'bg-amber-100 text-amber-800 font-semibold' : 'bg-stone-100'}`}
               >
-                Gruba
+                {isEng ? 'Thick' : 'Gruba'}
               </button>
             </div>
 
             <button
               type="button"
               onClick={clearCanvas}
-              className="inline-flex items-center gap-1 text-stone-600 hover:text-stone-900 hover:bg-stone-100 px-2.5 py-1 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1 text-stone-600 hover:text-stone-900 hover:bg-stone-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Wyczyść
+              {isEng ? 'Clear' : 'Wyczyść'}
             </button>
           </div>
         </div>
@@ -199,18 +204,18 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-stone-700 bg-white border border-stone-300 rounded-lg hover:bg-stone-100 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-stone-700 bg-white border border-stone-300 rounded-lg hover:bg-stone-100 transition-colors cursor-pointer"
           >
-            Anuluj
+            {isEng ? 'Cancel' : 'Anuluj'}
           </button>
           <button
             type="button"
             onClick={handleSave}
             disabled={!hasContent}
-            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs transition-colors cursor-pointer"
           >
             <Check className="w-4 h-4" />
-            Zatwierdź podpis
+            {isEng ? 'Save' : 'Zatwierdź podpis'}
           </button>
         </div>
       </div>

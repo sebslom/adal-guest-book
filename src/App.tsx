@@ -27,17 +27,48 @@ export default function App() {
   const [mode, setMode] = useState<'designer' | 'filler'>('filler');
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState<boolean>(false);
 
-  // Load saved template fields from IndexedDB
+  // Load saved template fields from IndexedDB, or check if repo contains a static PDF
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
+        // Auto-check if a static PDF was added to public/ (e.g. formularz.pdf or template.pdf)
+        let staticPdfDataUrl: string | null = null;
+        try {
+          const candidatePaths = ['./formularz.pdf', './template.pdf'];
+          for (const path of candidatePaths) {
+            const headRes = await fetch(path, { method: 'HEAD' });
+            if (headRes.ok) {
+              const fullRes = await fetch(path);
+              const blob = await fullRes.blob();
+              if (blob.size > 1000) {
+                staticPdfDataUrl = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                });
+                break;
+              }
+            }
+          }
+        } catch {
+          // Ignore if no static file found
+        }
+
         const storedTemplates = await idbGetTemplates();
         if (isMounted) {
           if (storedTemplates && storedTemplates.length > 0) {
-            setTemplate(storedTemplates[0]);
+            const active = storedTemplates[0];
+            if (staticPdfDataUrl && !active.pdfDataUrl) {
+              active.pdfDataUrl = staticPdfDataUrl;
+              await idbSaveTemplate(active);
+            }
+            setTemplate(active);
           } else {
             const initial = createDefaultSampleTemplate();
+            if (staticPdfDataUrl) {
+              initial.pdfDataUrl = staticPdfDataUrl;
+            }
             await idbSaveTemplate(initial);
             setTemplate(initial);
           }

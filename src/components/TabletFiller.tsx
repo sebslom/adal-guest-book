@@ -51,9 +51,31 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
     return initial;
   });
 
-  // 3-Click Lock state
+  // 5-Click Lock state
   const [lockClickCount, setLockClickCount] = useState<number>(0);
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Main page UI language (PL / ENG)
+  const [lang, setLang] = useState<'PL' | 'ENG'>(() => {
+    try {
+      const stored = localStorage.getItem('adal_ui_lang');
+      if (stored === 'ENG' || stored === 'PL') return stored;
+    } catch {
+      // ignore
+    }
+    return 'PL';
+  });
+
+  const handleToggleLang = (newLang: 'PL' | 'ENG') => {
+    setLang(newLang);
+    try {
+      localStorage.setItem('adal_ui_lang', newLang);
+    } catch {
+      // ignore
+    }
+  };
+
+  const isEng = lang === 'ENG';
 
   // Modals state
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
@@ -204,11 +226,15 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
         origin: { y: 0.7 },
       });
 
-      setSaveSuccessMessage(`Pomyślnie zapisano plik "${fileName}" na dysku!`);
+      setSaveSuccessMessage(
+        isEng
+          ? `Successfully saved "${fileName}" to disk!`
+          : `Pomyślnie zapisano plik "${fileName}" na dysku!`
+      );
       setTimeout(() => setSaveSuccessMessage(null), 5000);
     } catch (err) {
       console.error(err);
-      alert('Wystąpił błąd podczas generowania pliku PDF.');
+      alert(isEng ? 'An error occurred while generating the PDF file.' : 'Wystąpił błąd podczas generowania pliku PDF.');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -234,10 +260,10 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
             type="button"
             onClick={() => setIsResetConfirmOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 active:scale-95 rounded-xl transition-all shadow-2xs cursor-pointer"
-            title="Wyczyść wszystkie pola i rozpocznij nowy wpis"
+            title={isEng ? 'Clear all fields and start fresh' : 'Wyczyść wszystkie pola i rozpocznij nowy wpis'}
           >
             <RotateCcw className="w-4 h-4 text-stone-600 shrink-0" />
-            <span>Od nowa formularz</span>
+            <span>{isEng ? 'Reset form' : 'Od nowa formularz'}</span>
           </button>
 
           {/* ZAPISANIE NA DYSKU */}
@@ -246,10 +272,14 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
             onClick={handleSaveToDisk}
             disabled={isGeneratingPdf}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-            title="Zapisz gotowy dokument PDF na dysku urządzenia"
+            title={isEng ? 'Save completed PDF document to device storage' : 'Zapisz gotowy dokument PDF na dysku urządzenia'}
           >
             <Download className="w-4 h-4 shrink-0" />
-            <span>{isGeneratingPdf ? 'Zapisywanie...' : 'Zapisanie na dysku'}</span>
+            <span>
+              {isGeneratingPdf
+                ? (isEng ? 'Saving...' : 'Zapisywanie...')
+                : (isEng ? 'Save to disk' : 'Zapisanie na dysku')}
+            </span>
           </button>
 
           {/* WYŚLIJ EMAIL */}
@@ -257,10 +287,10 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
             type="button"
             onClick={() => setIsEmailModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-stone-800 bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-300 rounded-xl transition-all shadow-2xs cursor-pointer"
-            title="Wyślij formularz do odbiorcy z listy e-mail"
+            title={isEng ? 'Send form to recipient from email list' : 'Wyślij formularz do odbiorcy z listy e-mail'}
           >
             <Mail className="w-4 h-4 text-amber-700 shrink-0" />
-            <span>Wyślij e-mail</span>
+            <span>{isEng ? 'Send email' : 'Wyślij e-mail'}</span>
           </button>
 
           {/* Separator */}
@@ -277,7 +307,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                   : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              Strona 1
+              {isEng ? 'Page 1' : 'Strona 1'}
             </button>
             <button
               type="button"
@@ -288,7 +318,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                   : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              Strona 2
+              {isEng ? 'Page 2' : 'Strona 2'}
             </button>
           </div>
 
@@ -297,8 +327,8 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.max(60, z - 15))}
-              className="p-1 text-stone-600 hover:bg-stone-200 rounded-md"
-              title="Pomniejsz"
+              className="p-1 text-stone-600 hover:bg-stone-200 rounded-md cursor-pointer"
+              title={isEng ? 'Zoom out' : 'Pomniejsz'}
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
@@ -306,21 +336,49 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.min(160, z + 15))}
-              className="p-1 text-stone-600 hover:bg-stone-200 rounded-md"
-              title="Powiększ"
+              className="p-1 text-stone-600 hover:bg-stone-200 rounded-md cursor-pointer"
+              title={isEng ? 'Zoom in' : 'Powiększ'}
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* ENG / PL Language Toggle */}
+          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200">
+            <button
+              type="button"
+              onClick={() => handleToggleLang('PL')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                lang === 'PL'
+                  ? 'bg-stone-900 text-white shadow-2xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+              title="Przełącz na język polski"
+            >
+              PL
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleLang('ENG')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                lang === 'ENG'
+                  ? 'bg-stone-900 text-white shadow-2xs'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+              title="Switch to English"
+            >
+              ENG
+            </button>
+          </div>
         </div>
 
-        {/* Right: ONLY the padlock icon (completely inert, silent 3-click trigger) */}
+        {/* Right: ONLY the padlock icon (completely inert, silent 5-click trigger) */}
         <div className="flex items-center">
           <button
             type="button"
             onClick={handleLockClick}
             className="p-2 text-stone-400 select-none cursor-default focus:outline-none transition-none"
-            aria-label="Kłódka"
+            aria-label={isEng ? 'Lock' : 'Kłódka'}
             tabIndex={-1}
           >
             <Lock className="w-5 h-5 stroke-[1.8]" />
@@ -440,7 +498,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                     <textarea
                       value={typeof val === 'string' ? val : ''}
                       onChange={(e) => handleTextChange(field.id, e.target.value)}
-                      placeholder={field.placeholder || 'Wpisz notatki lub ustalenia z klientem...'}
+                      placeholder={field.placeholder || (isEng ? 'Enter notes or client requirements...' : 'Wpisz notatki lub ustalenia z klientem...')}
                       rows={6}
                       className="w-full h-full p-1.5 text-xs sm:text-sm leading-[22px] font-medium text-stone-900 bg-transparent hover:bg-amber-50/20 focus:bg-white/90 focus:outline-none rounded border border-transparent focus:border-amber-400 resize-none transition-all"
                     />
@@ -459,8 +517,8 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                           <button
                             type="button"
                             onClick={(e) => handleRemoveImage(field.id, e)}
-                            className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 shadow-md"
-                            title="Usuń szkic"
+                            className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 shadow-md cursor-pointer"
+                            title={isEng ? 'Remove sketch' : 'Usuń szkic'}
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -475,19 +533,19 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
                                 setIsSketchModalOpen(true);
                               }}
                               className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-stone-300 rounded-lg shadow-2xs hover:bg-amber-50 text-stone-700 flex items-center gap-1 cursor-pointer"
-                              title="Rysuj odręcznie na tablecie"
+                              title={isEng ? 'Draw by hand on tablet' : 'Rysuj odręcznie na tablecie'}
                             >
                               <PenTool className="w-3 h-3 text-amber-600" />
-                              <span>Rysuj szkic</span>
+                              <span>{isEng ? 'Draw sketch' : 'Rysuj szkic'}</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => handleImageClick(field.id)}
                               className="px-2 py-1 text-[11px] font-semibold bg-white border border-stone-300 rounded-lg shadow-2xs hover:bg-amber-50 text-stone-700 flex items-center gap-1 cursor-pointer"
-                              title="Wgraj zdjęcie lub rysunek"
+                              title={isEng ? 'Upload photo or drawing' : 'Wgraj zdjęcie lub rysunek'}
                             >
                               <Upload className="w-3 h-3 text-stone-600" />
-                              <span>Wgraj</span>
+                              <span>{isEng ? 'Upload' : 'Wgraj'}</span>
                             </button>
                           </div>
                           <span className="text-[10px] text-stone-400">
@@ -511,6 +569,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
         values={values}
         fields={template.fields}
         renderedPages={renderedPages}
+        lang={lang}
       />
 
       {/* Reset Confirmation Modal */}
@@ -518,6 +577,7 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
         isOpen={isResetConfirmOpen}
         onClose={() => setIsResetConfirmOpen(false)}
         onConfirm={handleConfirmReset}
+        lang={lang}
       />
 
       {/* Sketch / Drawing Canvas Modal */}
@@ -527,7 +587,8 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
           setIsSketchModalOpen(false);
           setActiveSignatureField(null);
         }}
-        title="Szkic projektu / Notatki odręczne"
+        title={isEng ? 'Project Sketch / Handwritten Notes' : 'Szkic projektu / Notatki odręczne'}
+        lang={lang}
         initialValue={
           activeSignatureField && typeof values[activeSignatureField.id] === 'string'
             ? (values[activeSignatureField.id] as string)
