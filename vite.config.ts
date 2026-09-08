@@ -22,9 +22,42 @@ export default defineConfig(() => {
                 fs.copyFileSync(indexPath, path.join(distPath, '404.html'));
               }
             }
+            // Copy main/ folder into dist/main/ if exists
+            const mainDir = path.resolve(__dirname, 'main');
+            const distMain = path.resolve(__dirname, 'dist', 'main');
+            if (fs.existsSync(mainDir)) {
+              if (!fs.existsSync(distMain)) fs.mkdirSync(distMain, { recursive: true });
+              const files = fs.readdirSync(mainDir);
+              for (const f of files) {
+                const srcPath = path.join(mainDir, f);
+                if (fs.statSync(srcPath).isFile()) {
+                  fs.copyFileSync(srcPath, path.join(distMain, f));
+                }
+              }
+            }
           } catch (e) {
-            console.error('Failed to copy 404 or create .nojekyll:', e);
+            console.error('Failed to copy 404 or create .nojekyll or copy main folder:', e);
           }
+        },
+      },
+      {
+        name: 'serve-main-folder',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (req.url) {
+              const urlClean = req.url.split('?')[0];
+              if (urlClean.startsWith('/main/') || urlClean.startsWith('./main/')) {
+                const subPath = decodeURIComponent(urlClean.replace(/^\.?\/main\//, ''));
+                const filePath = path.resolve(__dirname, 'main', subPath);
+                if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+                  res.setHeader('Content-Type', filePath.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+                  fs.createReadStream(filePath).pipe(res);
+                  return;
+                }
+              }
+            }
+            next();
+          });
         },
       },
     ],

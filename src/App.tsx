@@ -33,42 +33,94 @@ export default function App() {
     let isMounted = true;
     (async () => {
       try {
-        // Auto-check if a static PDF was added to public/ (e.g. formularz.pdf or template.pdf)
-        let staticPdfDataUrl: string | null = null;
+        // Auto-check if static PDF file was provided in repo (e.g. in main/ or public/)
+        let staticPdfResult: { dataUrl: string; fileName: string } | null = null;
         try {
-          const candidatePaths = ['./formularz.pdf', './template.pdf'];
-          for (const path of candidatePaths) {
-            const headRes = await fetch(path, { method: 'HEAD' });
-            if (headRes.ok) {
-              const fullRes = await fetch(path);
-              const blob = await fullRes.blob();
-              if (blob.size > 1000) {
-                staticPdfDataUrl = await new Promise<string>((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-                });
-                break;
-              }
+          const targetName = '2026_Targi_MAPIC_GuestBook_Adal_02_Formularz.pdf';
+          const candidateNames = [
+            targetName,
+            'formularz.pdf',
+            'template.pdf',
+            'Adal_Guest_Book_2026_MAPIC.pdf',
+          ];
+          const prefixes = [
+            './main/',
+            'main/',
+            '/main/',
+            './public/main/',
+            '/public/main/',
+            './',
+            '/',
+            '',
+            './public/',
+            '/public/',
+          ];
+
+          const testUrls: string[] = [];
+          for (const prefix of prefixes) {
+            for (const name of candidateNames) {
+              const url = `${prefix}${name}`;
+              testUrls.push(url);
+              testUrls.push(encodeURI(url));
             }
           }
-        } catch {
-          // Ignore if no static file found
+          const uniqueUrls = Array.from(new Set(testUrls));
+
+          for (const path of uniqueUrls) {
+            try {
+              const res = await fetch(path);
+              if (!res.ok) continue;
+
+              const blob = await res.blob();
+              if (blob.size < 500) continue;
+
+              // Verify PDF magic bytes '%PDF' (0x25, 0x50, 0x44, 0x46)
+              // to prevent loading HTML SPA 404 fallbacks as PDF
+              const magicBuffer = await blob.slice(0, 5).arrayBuffer();
+              const magicBytes = new Uint8Array(magicBuffer);
+              const isPdf =
+                magicBytes[0] === 0x25 &&
+                magicBytes[1] === 0x50 &&
+                magicBytes[2] === 0x44 &&
+                magicBytes[3] === 0x46;
+
+              if (!isPdf) continue;
+
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+
+              staticPdfResult = {
+                dataUrl,
+                fileName: targetName,
+              };
+              console.log('Successfully auto-loaded default PDF from:', path);
+              break;
+            } catch {
+              // ignore and try next path
+            }
+          }
+        } catch (e) {
+          console.warn('Auto PDF discovery error:', e);
         }
 
         const storedTemplates = await idbGetTemplates();
         if (isMounted) {
           if (storedTemplates && storedTemplates.length > 0) {
             const active = storedTemplates[0];
-            if (staticPdfDataUrl && !active.pdfDataUrl) {
-              active.pdfDataUrl = staticPdfDataUrl;
+            if (staticPdfResult) {
+              active.pdfDataUrl = staticPdfResult.dataUrl;
+              active.fileName = staticPdfResult.fileName;
               await idbSaveTemplate(active);
             }
             setTemplate(active);
           } else {
             const initial = createDefaultSampleTemplate();
-            if (staticPdfDataUrl) {
-              initial.pdfDataUrl = staticPdfDataUrl;
+            if (staticPdfResult) {
+              initial.pdfDataUrl = staticPdfResult.dataUrl;
+              initial.fileName = staticPdfResult.fileName;
             }
             await idbSaveTemplate(initial);
             setTemplate(initial);
