@@ -98,22 +98,26 @@ export const TabletFiller: React.FC<TabletFillerProps> = ({
     2
   );
 
-  // Handle 5 clicks on the lock in the top left corner - resets after 5 clicks and after timeout
+  // Handle 5 clicks on the lock in the top right corner - resets after 5 clicks and after timeout
   const handleLockClick = () => {
-    if (lockTimerRef.current) {
-      clearTimeout(lockTimerRef.current);
-    }
-    const next = lockClickCount + 1;
-    if (next >= 5) {
-      setLockClickCount(0);
-      // Trigger designer / editor password authentication outside of any setState updater
-      onSwitchToDesigner();
-    } else {
-      setLockClickCount(next);
-      lockTimerRef.current = setTimeout(() => {
-        setLockClickCount(0);
-      }, 3000);
-    }
+    setLockClickCount((prev) => {
+      const next = prev + 1;
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+      }
+
+      if (next >= 5) {
+        // Trigger designer / editor password authentication
+        onSwitchToDesigner();
+        // Resets after 5 clicks so next time user must click 5 times again
+        return 0;
+      } else {
+        lockTimerRef.current = setTimeout(() => {
+          setLockClickCount(0);
+        }, 3000);
+        return next;
+      }
+    });
   };
 
   const handleTextChange = (fieldId: string, value: string) => {
