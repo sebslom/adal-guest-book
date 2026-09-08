@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Plus, Trash2, Check, ExternalLink, X, Send, Copy } from 'lucide-react';
+import { Mail, Plus, Trash2, Check, ExternalLink, X, Send, Copy, Download, Globe, AlertCircle, ChevronDown, ChevronUp, Sparkles, Loader2 } from 'lucide-react';
 import { FilledValues, FormField } from '../types';
-import { RenderedPage } from '../utils/pdfHelper';
+import { RenderedPage, generateFilledPdf } from '../utils/pdfHelper';
+import { generateAdalGuestBookPdf } from '../utils/adalPdfExporter';
 
 interface EmailSenderModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface EmailSenderModalProps {
 }
 
 const STORAGE_EMAIL_RECIPIENTS_KEY = 'adal_email_recipients_list_v2';
+const STORAGE_WEBHOOK_URL_KEY = 'adal_email_webhook_url_v1';
 const OLD_SAMPLE_EMAILS = [
   'biuro@adal-decorations.pl',
   'sales@adal-decorations.pl',
@@ -30,7 +32,6 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
   const isEng = lang === 'ENG';
   const [recipients, setRecipients] = useState<string[]>(() => {
     try {
-      // Check v2 key first, then fallback to v1 filtering out samples
       const stored = localStorage.getItem(STORAGE_EMAIL_RECIPIENTS_KEY) || localStorage.getItem('adal_email_recipients_list_v1');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -50,6 +51,20 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
   const [selectedEmail, setSelectedEmail] = useState<string>('');
   const [newEmailInput, setNewEmailInput] = useState<string>('');
   const [copiedNotification, setCopiedNotification] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [pdfDownloaded, setPdfDownloaded] = useState(false);
+
+  // Webhook / automated sending
+  const [webhookUrl, setWebhookUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem(STORAGE_WEBHOOK_URL_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showWebhookSettings, setShowWebhookSettings] = useState(false);
+  const [isSendingWebhook, setIsSendingWebhook] = useState(false);
+  const [webhookMessage, setWebhookMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Initialize selectedEmail
   useEffect(() => {
@@ -69,6 +84,15 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
       localStorage.setItem(STORAGE_EMAIL_RECIPIENTS_KEY, JSON.stringify(list));
     } catch (e) {
       console.error('Failed to save email recipients', e);
+    }
+  };
+
+  const handleSaveWebhookUrl = (url: string) => {
+    setWebhookUrl(url);
+    try {
+      localStorage.setItem(STORAGE_WEBHOOK_URL_KEY, url);
+    } catch (e) {
+      console.error('Failed to save webhook URL', e);
     }
   };
 
@@ -153,6 +177,19 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
       )}&body=${encodeURIComponent(emailBody)}`
     : '';
 
+  // Direct webmail compose links
+  const gmailComposeUrl = selectedEmail
+    ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(
+        selectedEmail
+      )}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
+    : '';
+
+  const outlookComposeUrl = selectedEmail
+    ? `https://outlook.live.com/mail/0/deeplink/compose?to=${encodeURIComponent(
+        selectedEmail
+      )}&subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
+    : '';
+
   const handleCopyBody = async () => {
     try {
       const fullText = `Temat: ${emailSubject}\n\n${emailBody}`;
@@ -160,7 +197,6 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
       setCopiedNotification(true);
       setTimeout(() => setCopiedNotification(false), 3000);
     } catch {
-      // Fallback
       const textarea = document.createElement('textarea');
       textarea.value = `Temat: ${emailSubject}\n\n${emailBody}`;
       document.body.appendChild(textarea);
@@ -172,25 +208,136 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
     }
   };
 
-  const handleLaunchEmailClient = () => {
+  const handleDownloadPdf = async () => {
+    setIsDownloadingPdf(true);
+    try {
+      let blob: Blob;
+      if (renderedPages && renderedPages.length > 0) {
+        const result = await generateFilledPdf(renderedPages, fields, values);
+        blob = result.blob;
+      } else {
+        const result = await generateAdalGuestBookPdf(values, fields);
+        blob = result.blob;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = company ? company.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Formularz';
+      link.download = `2026_Targi_MAPIC_GuestBook_Adal_02_${safeName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setPdfDownloaded(true);
+      setTimeout(() => setPdfDownloaded(false), 4000);
+    } catch (e) {
+      console.error('Failed to generate/download PDF:', e);
+      alert(isEng ? 'Could not generate PDF file.' : 'Nie udało się wygenerować pliku PDF.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleOpenGmail = () => {
     if (!selectedEmail) {
-      alert(isEng ? 'Please select or add a recipient email.' : 'Proszę wybrać lub dodać adres e-mail odbiorcy.');
+      alert(isEng ? 'Please select a recipient email.' : 'Proszę wybrać adres e-mail odbiorcy.');
+      return;
+    }
+    window.open(gmailComposeUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleOpenOutlook = () => {
+    if (!selectedEmail) {
+      alert(isEng ? 'Please select a recipient email.' : 'Proszę wybrać adres e-mail odbiorcy.');
+      return;
+    }
+    window.open(outlookComposeUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSendViaWebhook = async () => {
+    if (!webhookUrl) {
+      setShowWebhookSettings(true);
+      return;
+    }
+    if (!selectedEmail) {
+      alert(isEng ? 'Please select a recipient email.' : 'Proszę wybrać adres e-mail odbiorcy.');
       return;
     }
 
-    // Direct link click which works reliably across iframes and mobile
-    const link = document.createElement('a');
-    link.href = mailtoUrl;
-    link.target = '_top';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    setIsSendingWebhook(true);
+    setWebhookMessage(null);
+
+    try {
+      let pdfBase64 = '';
+      try {
+        let blob: Blob;
+        if (renderedPages && renderedPages.length > 0) {
+          const result = await generateFilledPdf(renderedPages, fields, values);
+          blob = result.blob;
+        } else {
+          const result = await generateAdalGuestBookPdf(values, fields);
+          blob = result.blob;
+        }
+        pdfBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        console.warn('Could not encode PDF for webhook, sending text payload', err);
+      }
+
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: selectedEmail,
+          subject: emailSubject,
+          body: emailBody,
+          company,
+          contact,
+          clientEmail: emailVal,
+          phone: phoneVal,
+          country: countryVal,
+          date: dateVal,
+          budget: budgetVal,
+          deadline: deadlineVal,
+          notesPage1: notesP1,
+          notesPage2: notesP2,
+          pdfBase64,
+          pdfFileName: '2026_Targi_MAPIC_GuestBook_Adal_02_Formularz.pdf',
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (res.ok) {
+        setWebhookMessage({
+          type: 'success',
+          text: isEng ? 'Email sent successfully via webhook!' : 'Wiadomość została wysłana automatycznie przez webhook!',
+        });
+        setTimeout(() => {
+          onClose();
+        }, 1800);
+      } else {
+        setWebhookMessage({
+          type: 'error',
+          text: isEng ? `Sending failed (status ${res.status})` : `Błąd serwera wysyłkowego (kod: ${res.status})`,
+        });
+      }
+    } catch (e: any) {
+      console.error('Webhook sending error:', e);
+      setWebhookMessage({
+        type: 'error',
+        text: isEng ? 'Connection error to webhook service' : 'Błąd połączenia z usługą wysyłkową.',
+      });
+    } finally {
+      setIsSendingWebhook(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-xl w-full overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
           <div className="flex items-center gap-2.5">
@@ -199,12 +346,12 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-stone-900">
-                {isEng ? 'Send Form via Email' : 'Wyślij formularz e-mailem'}
+                {isEng ? 'Send Form via Email' : 'Wysyłka formularza e-mailem'}
               </h3>
               <p className="text-xs text-stone-500">
                 {isEng
-                  ? 'Select recipient from the list or add a new email address'
-                  : 'Wybierz odbiorcę z listy lub dodaj nowy adres e-mail'}
+                  ? 'Send form details and PDF to selected recipients'
+                  : 'Prześlij dane formularza i załącznik PDF do wybranego odbiorcy'}
               </p>
             </div>
           </div>
@@ -222,10 +369,10 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
           {/* Recipient list */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
-              {isEng ? 'Select recipient from list:' : 'Wybierz odbiorcę z listy:'}
+              {isEng ? '1. Select recipient:' : '1. Wybierz odbiorcę z listy:'}
             </label>
             {recipients.length === 0 ? (
-              <div className="py-5 px-4 text-center rounded-xl border border-dashed border-stone-300 bg-stone-50/60">
+              <div className="py-4 px-4 text-center rounded-xl border border-dashed border-stone-300 bg-stone-50/60">
                 <Mail className="w-6 h-6 mx-auto text-stone-400 mb-1" />
                 <p className="text-xs text-stone-700 font-medium">
                   {isEng ? 'No saved email addresses' : 'Brak zapisanych adresów e-mail'}
@@ -235,7 +382,7 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
                 </p>
               </div>
             ) : (
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {recipients.map((email) => {
                   const isSelected = selectedEmail === email;
                   return (
@@ -277,14 +424,11 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
           </div>
 
           {/* Add new email input */}
-          <form onSubmit={handleAddEmail} className="pt-1">
-            <label className="text-xs font-semibold text-stone-600 mb-1 block">
-              {isEng ? '+ Add new email address to list:' : '+ Dodaj nowy adres e-mail do listy:'}
-            </label>
+          <form onSubmit={handleAddEmail} className="pt-0.5">
             <div className="flex gap-2">
               <input
                 type="email"
-                placeholder={isEng ? 'e.g. your-email@company.com' : 'np. twoj-mail@firma.pl'}
+                placeholder={isEng ? 'e.g. sales@adal.pl' : 'np. biuro@adal.pl, jan@firma.pl'}
                 value={newEmailInput}
                 onChange={(e) => setNewEmailInput(e.target.value)}
                 className="flex-1 px-3 py-2 text-xs border border-stone-300 rounded-xl bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
@@ -299,11 +443,184 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
             </div>
           </form>
 
+          {/* Action buttons: Ways to send */}
+          <div className="space-y-2.5 pt-1">
+            <label className="text-xs font-bold text-stone-700 uppercase tracking-wider block">
+              {isEng ? '2. Choose how to send:' : '2. Wybierz sposób wysyłki:'}
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Option A: Gmail Web (Recommended, works in any browser) */}
+              <button
+                type="button"
+                onClick={handleOpenGmail}
+                disabled={!selectedEmail}
+                className="p-3 border border-red-200 bg-red-50/60 hover:bg-red-50 text-red-900 rounded-xl text-left transition-all cursor-pointer flex items-start gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed group shadow-2xs"
+              >
+                <div className="p-1.5 bg-red-600 text-white rounded-lg group-hover:scale-105 transition-transform mt-0.5">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold flex items-center gap-1">
+                    <span>{isEng ? 'Open in Gmail (Web)' : 'Otwórz w Gmail (Web)'}</span>
+                    <ExternalLink className="w-3 h-3 text-red-700" />
+                  </div>
+                  <div className="text-[11px] text-red-700/80 leading-tight mt-0.5">
+                    {isEng ? 'Opens in browser with pre-filled fields' : 'Działa w przeglądarce bez programu pocztowego'}
+                  </div>
+                </div>
+              </button>
+
+              {/* Option B: Outlook Web */}
+              <button
+                type="button"
+                onClick={handleOpenOutlook}
+                disabled={!selectedEmail}
+                className="p-3 border border-sky-200 bg-sky-50/60 hover:bg-sky-50 text-sky-900 rounded-xl text-left transition-all cursor-pointer flex items-start gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed group shadow-2xs"
+              >
+                <div className="p-1.5 bg-sky-600 text-white rounded-lg group-hover:scale-105 transition-transform mt-0.5">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold flex items-center gap-1">
+                    <span>{isEng ? 'Open in Outlook Web' : 'Otwórz w Outlook Web'}</span>
+                    <ExternalLink className="w-3 h-3 text-sky-700" />
+                  </div>
+                  <div className="text-[11px] text-sky-700/80 leading-tight mt-0.5">
+                    {isEng ? 'Opens Outlook / Office 365 web' : 'Dla kont Microsoft / Office 365'}
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Download PDF button (Essential because mailto cannot attach files automatically) */}
+            <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1.5 bg-stone-200 text-stone-700 rounded-lg">
+                  <Download className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-stone-800">
+                    {isEng ? 'Download PDF to attach' : 'Pobierz formularz PDF do załączenia'}
+                  </div>
+                  <div className="text-[11px] text-stone-500">
+                    {isEng
+                      ? 'Browser mail links cannot attach files automatically'
+                      : 'Przeglądarki ze względów bezpieczeństwa nie mogą same dodać pliku'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                className="px-3 py-1.5 text-xs font-bold bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+              >
+                {isDownloadingPdf ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    <span>{isEng ? 'Generating...' : 'Tworzenie...'}</span>
+                  </>
+                ) : pdfDownloaded ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                    <span className="text-emerald-700">{isEng ? 'Downloaded!' : 'Pobrano!'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5 text-stone-600" />
+                    <span>{isEng ? 'Download PDF' : 'Pobierz PDF'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Webhook / Automated Direct Send Section */}
+          <div className="border border-stone-200 rounded-xl overflow-hidden bg-stone-50/50">
+            <button
+              type="button"
+              onClick={() => setShowWebhookSettings(!showWebhookSettings)}
+              className="w-full px-4 py-2.5 text-left text-xs font-bold text-stone-700 hover:bg-stone-100 flex items-center justify-between transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>{isEng ? 'Automatic Background Sending (Webhook / API)' : 'Automatyczna wysyłka w tle (Webhook / API)'}</span>
+                {webhookUrl && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded">
+                    {isEng ? 'Connected' : 'Aktywne'}
+                  </span>
+                )}
+              </div>
+              {showWebhookSettings ? <ChevronUp className="w-4 h-4 text-stone-500" /> : <ChevronDown className="w-4 h-4 text-stone-500" />}
+            </button>
+
+            {showWebhookSettings && (
+              <div className="p-4 bg-white border-t border-stone-200 text-xs space-y-3">
+                <p className="text-[11px] text-stone-600 leading-relaxed">
+                  {isEng
+                    ? 'Enter an incoming webhook URL (e.g. Google Apps Script, Make.com, Zapier, or Formspree) to send emails automatically in the background with PDF attached.'
+                    : 'Wpisz adres URL webhooka (np. darmowy Google Apps Script, Make.com, Zapier lub Formspree), aby formularz wraz z PDF wysyłał się całkowicie w tle bez otwierania poczty.'}
+                </p>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-stone-700 block">
+                    URL Webhooka (POST):
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://script.google.com/macros/s/... lub https://hook.eu1.make.com/..."
+                    value={webhookUrl}
+                    onChange={(e) => handleSaveWebhookUrl(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-stone-300 rounded-lg bg-stone-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono text-[11px]"
+                  />
+                </div>
+
+                {webhookUrl && (
+                  <button
+                    type="button"
+                    onClick={handleSendViaWebhook}
+                    disabled={isSendingWebhook || !selectedEmail}
+                    className="w-full py-2 px-3 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg flex items-center justify-center gap-2 shadow-2xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isSendingWebhook ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>{isEng ? 'Sending automatically...' : 'Wysyłanie automatyczne w tle...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{isEng ? 'Send now in background' : 'Wyślij teraz automatycznie w tle'}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {webhookMessage && (
+                  <div
+                    className={`p-2.5 rounded-lg text-[11px] font-medium flex items-center gap-2 ${
+                      webhookMessage.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}
+                  >
+                    {webhookMessage.type === 'success' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[3]" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{webhookMessage.text}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Summary preview */}
           <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 text-xs space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
-                {isEng ? 'Dispatch summary:' : 'Podsumowanie wysyłki:'}
+                {isEng ? 'Dispatch summary:' : 'Podsumowanie treści wiadomości:'}
               </span>
               <button
                 type="button"
@@ -334,50 +651,59 @@ export const EmailSenderModal: React.FC<EmailSenderModalProps> = ({
                 <strong>{company || contact || (isEng ? 'No data' : 'Brak danych')}</strong>
               </div>
             </div>
-            <div className="text-[11px] text-stone-500 pt-0.5">
-              {isEng
-                ? 'Clicking "Send email" opens your mail app with recipient, subject, and client details pre-filled (without downloading file).'
-                : 'Kliknięcie przycisku uruchamia Twój program pocztowy z wypełnionym adresem, tematem oraz danymi klienta (bez pobierania pliku na dysk).'}
-            </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-stone-50 border-t border-stone-200 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
+        <div className="px-6 py-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between gap-2">
+          {/* Default native app mailto trigger */}
+          <a
+            href={mailtoUrl}
+            target="_top"
+            rel="noopener noreferrer"
+            onClick={() => {
+              setTimeout(() => onClose(), 800);
+            }}
+            className="text-[11px] font-semibold text-stone-500 hover:text-stone-800 underline cursor-pointer"
           >
-            {isEng ? 'Cancel' : 'Anuluj'}
-          </button>
-          
-          {selectedEmail ? (
-            <a
-              href={mailtoUrl}
-              target="_top"
-              rel="noopener noreferrer"
-              onClick={() => {
-                setTimeout(() => onClose(), 800);
-              }}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer text-center"
-            >
-              <Send className="w-4 h-4" />
-              <span>{isEng ? 'Send email' : 'Wyślij e-mail'}</span>
-            </a>
-          ) : (
+            {isEng ? 'Use default desktop email app' : 'Otwórz w lokalnym programie pocztowym'}
+          </a>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleLaunchEmailClient}
-              disabled={true}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 opacity-50 rounded-xl shadow-md inline-flex items-center gap-2 cursor-not-allowed"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
             >
-              <Send className="w-4 h-4" />
-              <span>{isEng ? 'Send email' : 'Wyślij e-mail'}</span>
+              {isEng ? 'Close' : 'Zamknij'}
             </button>
-          )}
+            
+            {/* Primary quick send button (Gmail if chosen or Webhook if active) */}
+            {webhookUrl ? (
+              <button
+                type="button"
+                onClick={handleSendViaWebhook}
+                disabled={isSendingWebhook || !selectedEmail}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer text-center disabled:opacity-50"
+              >
+                {isSendingWebhook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <span>{isEng ? 'Send in background' : 'Wyślij w tle'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenGmail}
+                disabled={!selectedEmail}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md inline-flex items-center gap-2 transition-all cursor-pointer text-center disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                <span>{isEng ? 'Send via Gmail' : 'Wyślij przez Gmail'}</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
